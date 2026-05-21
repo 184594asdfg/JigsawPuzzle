@@ -13,6 +13,12 @@ const PIECE_RADIUS = 2
 const SRC_IMAGE_W = 840
 const SRC_IMAGE_H = 1260
 
+/** 音效路径：文件放在项目根目录 audio/ 下 */
+const SOUND_MOVE = '/audio/move.mp3'
+const SOUND_SWAP = '/audio/swap.mp3'
+const VIDEO_MERGE_PKG = '/videos/merge.mp4'
+const MERGE_FX_IMAGE = '/videos/merge_fx.png'
+
 /**
  * 棋盘外宽 = 屏宽×100%；内区 padding 12、块间距 GAP；
  * 单块 cellW×cellH（2:3），图片区 = 扣除 border+padding 后的内框。
@@ -75,7 +81,15 @@ Page({
     imgH: 0,
     groups: [],
     moves: 0,
-    showSuccess: false
+    showSuccess: false,
+    showMergeFx: false,
+    mergeFxUseImage: false,
+    mergeVideoSrc: '',
+    mergeFxImage: MERGE_FX_IMAGE,
+    mergeVideoX: 0,
+    mergeVideoY: 0,
+    mergeVideoW: 0,
+    mergeVideoH: 0
   },
 
   gridSize: 4,
@@ -110,10 +124,50 @@ Page({
   },
 
   onReady() {
+    this.initSounds()
+    this.prepareMergeVideo()
     if (this._pendingBootstrap) {
       this._pendingBootstrap = false
       this.bootstrapPuzzle()
     }
+  },
+
+  onUnload() {
+    this.destroySounds()
+  },
+
+  initSounds() {
+    if (this._moveAudio) return
+    this._moveAudio = wx.createInnerAudioContext()
+    this._swapAudio = wx.createInnerAudioContext()
+    this._moveAudio.src = SOUND_MOVE
+    this._swapAudio.src = SOUND_SWAP
+  },
+
+  destroySounds() {
+    if (this._moveAudio) {
+      this._moveAudio.destroy()
+      this._moveAudio = null
+    }
+    if (this._swapAudio) {
+      this._swapAudio.destroy()
+      this._swapAudio = null
+    }
+  },
+
+  playSound(ctx) {
+    if (!ctx) return
+    ctx.stop()
+    ctx.seek(0)
+    ctx.play()
+  },
+
+  playMoveSound() {
+    this.playSound(this._moveAudio)
+  },
+
+  playSwapSound() {
+    this.playSound(this._swapAudio)
   },
 
   applyLayout() {
@@ -184,7 +238,8 @@ Page({
     this.setData({
       groups: this.buildGroups(),
       moves: 0,
-      showSuccess: false
+      showSuccess: false,
+      showMergeFx: false
     })
   },
 
@@ -255,6 +310,191 @@ Page({
     }
 
     return groups
+  },
+
+  snapshotPieceGroupSizes() {
+    const sizes = {}
+    this.findAllGroups().forEach(ids => {
+      ids.forEach(id => { sizes[id] = ids.length })
+    })
+    return sizes
+  },
+
+  findMergedGroupAfterMove(movedIds, sizeBefore) {
+    const movedSet = new Set(movedIds)
+    let bestIds = null
+    for (const ids of this.findAllGroups()) {
+      if (ids.length < 2) continue
+      if (!ids.some(id => movedSet.has(id))) continue
+      const prevMax = Math.max(...ids.map(id => sizeBefore[id] || 1))
+      if (ids.length > prevMax && (!bestIds || ids.length > bestIds.length)) {
+        bestIds = ids
+      }
+    }
+    return bestIds
+  },
+
+  pickGroupRenderData(groups, memberIds) {
+    const idSet = new Set(memberIds)
+    return groups.find(
+      g => g.isCompound && g.pieces.length === memberIds.length &&
+        g.pieces.every(p => idSet.has(p.id))
+    ) || null
+  },
+
+  clearMergeFxTimer() {
+    if (this._mergeFxTimer) {
+      clearTimeout(this._mergeFxTimer)
+      this._mergeFxTimer = null
+    }
+  },
+
+  prepareMergeVideo() {
+    if (this._mergeVideoPreparePromise) return this._mergeVideoPreparePromise
+
+    this._mergeVideoPreparePromise = new Promise(resolve => {
+      const dest = `${wx.env.USER_DATA_PATH}/merge_fx.mp4`
+      const fs = wx.getFileSystemManager()
+
+      const finish = (path, useImage) => {
+        this._mergeVideoPath = path
+        this._mergeFxPreferImage = useImage
+        resolve({ path, useImage })
+      }
+
+      const verify = (src, onOk, onFail) => {
+        if (!src) return onFail()
+        wx.getVideoInfo({
+          src,
+          success: () => onOk(src),
+          fail: onFail
+        })
+      }
+
+      const tryPackage = () => {
+        verify(VIDEO_MERGE_PKG, src => finish(src, false), () => finish('', true))
+      }
+
+      fs.copyFile({
+        srcPath: VIDEO_MERGE_PKG,
+        destPath: dest,
+        success: () => verify(dest, src => finish(src, false), tryPackage),
+        fail: () => {
+          fs.readFile({
+            filePath: VIDEO_MERGE_PKG,
+            success: res => {
+              fs.writeFile({
+                filePath: dest,
+                data: res.data,
+                success: () => verify(dest, src => finish(src, false), tryPackage),
+                fail: tryPackage
+              })
+            },
+            fail: tryPackage
+          })
+        }
+      })
+    })
+
+    return this._mergeVideoPreparePromise
+  },
+
+  getMergeFxRect(group) {
+    const pad = 8
+    const x = Math.max(0, group.x - pad)
+    const y = Math.max(0, group.y - pad)
+    const w = Math.min(this.data.boardW - x, group.w + pad * 2)
+    const h = Math.min(this.data.boardH - y, group.h + pad * 2)
+    return {
+      mergeVideoX: x,
+      mergeVideoY: y,
+      mergeVideoW: Math.max(w, 60),
+      mergeVideoH: Math.max(h, 60)
+    }
+  },
+
+  playMergeVideo() {
+    try {
+      const ctx = wx.createVideoContext('mergeFxVideo', this)
+      ctx.stop()
+      ctx.seek(0)
+      ctx.play()
+    } catch (err) {
+      console.warn('[merge-video] play failed', err)
+    }
+  },
+
+  showMergeImageFx(group) {
+    const rect = this.getMergeFxRect(group)
+    this.setData({
+      showMergeFx: true,
+      mergeFxUseImage: true,
+      mergeVideoSrc: '',
+      ...rect
+    })
+    this._mergeFxTimer = setTimeout(() => this.hideMergeEffect(), 1200)
+  },
+
+  showMergeEffect(group) {
+    if (!group) return
+    this.clearMergeFxTimer()
+
+    const apply = ({ path, useImage }) => {
+      if (useImage || !path) {
+        this.showMergeImageFx(group)
+        return
+      }
+      const rect = this.getMergeFxRect(group)
+      this.setData({
+        showMergeFx: true,
+        mergeFxUseImage: false,
+        mergeVideoSrc: path,
+        ...rect
+      }, () => {
+        this.playMergeVideo()
+        setTimeout(() => this.playMergeVideo(), 120)
+      })
+      this._mergeFxTimer = setTimeout(() => this.hideMergeEffect(), 4000)
+    }
+
+    if (this._mergeVideoPath !== undefined) {
+      apply({
+        path: this._mergeVideoPath,
+        useImage: this._mergeFxPreferImage
+      })
+      return
+    }
+    this.prepareMergeVideo().then(apply)
+  },
+
+  hideMergeEffect() {
+    this.clearMergeFxTimer()
+    if (!this.data.mergeFxUseImage) {
+      try {
+        wx.createVideoContext('mergeFxVideo', this).stop()
+      } catch (err) { /* ignore */ }
+    }
+    this.setData({
+      showMergeFx: false,
+      mergeFxUseImage: false,
+      mergeVideoSrc: ''
+    })
+  },
+
+  onMergeVideoReady() {
+    if (this.data.showMergeFx && !this.data.mergeFxUseImage) this.playMergeVideo()
+  },
+
+  onMergeVideoEnd() {
+    this.hideMergeEffect()
+  },
+
+  onMergeVideoError(e) {
+    console.warn('[merge-video] error', e.detail)
+    if (!this.data.showMergeFx || this.data.mergeFxUseImage) return
+    const group = this._mergeFxFallbackGroup
+    if (group) this.showMergeImageFx(group)
+    else this.hideMergeEffect()
   },
 
   // =========================================================================
@@ -458,6 +698,8 @@ Page({
       originY: group.y
     }
 
+    this.playMoveSound()
+
     this.setData({
       [`groups[${groupIdx}].dragging`]: true,
       [`groups[${groupIdx}].noTransition`]: true
@@ -556,6 +798,9 @@ Page({
   },
 
   commitMove({ info, newSlotById, displacedAssignment }) {
+    if (Object.keys(displacedAssignment).length > 0) this.playSwapSound()
+
+    const sizeBefore = this.snapshotPieceGroupSizes()
     const preserved = {}
     for (const g of this.data.groups) {
       for (const p of g.pieces) {
@@ -577,11 +822,19 @@ Page({
     })
 
     const newGroups = this.buildGroups(preserved)
+    const mergedIds = this.findMergedGroupAfterMove(info.memberIds, sizeBefore)
+    const mergedGroup = mergedIds
+      ? this.pickGroupRenderData(newGroups, mergedIds)
+      : null
 
     this.setData({
       groups: newGroups,
       moves: this.data.moves + 1
     }, () => {
+      if (mergedGroup) {
+        this._mergeFxFallbackGroup = mergedGroup
+        this.showMergeEffect(mergedGroup)
+      }
       this._settleTimer = setTimeout(() => {
         this._settleTimer = null
         const updates = {}

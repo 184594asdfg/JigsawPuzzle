@@ -1,0 +1,19 @@
+{
+  "description": "治愈系风景拼图小程序",
+  "packOptions": {
+    "include": [
+      {
+        "type": "glob",
+        "value": "videos/**"
+      },
+      {
+        "type": "glob",
+        "value": "audio/**"
+      }
+    ]
+  },
+  "setting": {
+    "es6": true,
+    "minified": true
+  }
+}

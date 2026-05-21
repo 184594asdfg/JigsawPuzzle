@@ -47,6 +47,36 @@
         </view>
       </view>
     </view>
+
+    <view
+      wx:if="{{showMergeFx && !mergeFxUseImage && mergeVideoSrc}}"
+      class="merge-fx-blend"
+      style="left: {{mergeVideoX}}px; top: {{mergeVideoY}}px; width: {{mergeVideoW}}px; height: {{mergeVideoH}}px;"
+    >
+      <video
+        id="mergeFxVideo"
+        class="merge-fx-video"
+        src="{{mergeVideoSrc}}"
+        autoplay
+        obey-mute-switch="{{false}}"
+        loop="{{false}}"
+        controls="{{false}}"
+        show-center-play-btn="{{false}}"
+        show-fullscreen-btn="{{false}}"
+        enable-progress-gesture="{{false}}"
+        object-fit="contain"
+        bindended="onMergeVideoEnd"
+        binderror="onMergeVideoError"
+        bindloadedmetadata="onMergeVideoReady"
+      />
+    </view>
+    <image
+      wx:if="{{showMergeFx && mergeFxUseImage}}"
+      class="merge-fx-image merge-fx-image--show"
+      src="{{mergeFxImage}}"
+      mode="aspectFit"
+      style="left: {{mergeVideoX}}px; top: {{mergeVideoY}}px; width: {{mergeVideoW}}px; height: {{mergeVideoH}}px;"
+    />
   </view>
 
   <view class="action-buttons">
