@@ -1,0 +1,30 @@
+<view class="home-container">
+  <view class="header">
+    <text class="title">治愈系风景拼图</text>
+    <text class="subtitle">放松心情，享受拼图的乐趣</text>
+  </view>
+  
+  <view class="gallery">
+    <view 
+      wx:for="{{images}}" 
+      wx:key="id" 
+      class="image-card"
+      bindtap="startPuzzle"
+      data-image="{{item.url}}"
+    >
+      <image class="preview-image" src="{{item.url}}" mode="aspectFill" />
+      <view class="image-overlay">
+        <text class="image-title">{{item.name}}</text>
+      </view>
+    </view>
+  </view>
+  
+  <view class="instructions">
+    <text class="instruction-title">游戏规则</text>
+    <view class="instruction-list">
+      <text class="instruction-item">• 点击或拖拽两个方块进行交换</text>
+      <text class="instruction-item">• 将所有方块恢复到正确位置</text>
+      <text class="instruction-item">• 完成拼图即可挑战成功</text>
+    </view>
+  </view>
+</view>

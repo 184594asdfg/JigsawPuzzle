@@ -1,0 +1,93 @@
+.home-container {
+  padding: 40rpx 30rpx;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 50rpx;
+}
+
+.title {
+  display: block;
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 2rpx 2rpx 4rpx rgba(0, 0, 0, 0.2);
+  margin-bottom: 16rpx;
+}
+
+.subtitle {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+  justify-content: center;
+}
+
+.image-card {
+  width: 280rpx;
+  height: 373rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.image-card:active {
+  transform: scale(0.95);
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.15);
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+}
+
+.image-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+  padding: 30rpx 20rpx 20rpx;
+}
+
+.image-title {
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 500;
+}
+
+.instructions {
+  margin-top: 50rpx;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 20rpx;
+  padding: 30rpx;
+}
+
+.instruction-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 20rpx;
+  text-align: center;
+}
+
+.instruction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.instruction-item {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.6;
+}

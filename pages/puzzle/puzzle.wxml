@@ -1,0 +1,89 @@
+<view class="puzzle-container">
+  <view class="puzzle-header">
+    <view class="back-btn" bindtap="goBack">
+      <text class="back-icon">←</text>
+      <text class="back-text">返回</text>
+    </view>
+    <view class="game-info">
+      <text class="moves-text">步数: {{moves}}</text>
+    </view>
+    <view class="shuffle-btn" bindtap="shufflePuzzle">
+      <text class="shuffle-icon">🔄</text>
+    </view>
+  </view>
+
+  <!--
+    棋盘：相对定位容器，里面摆放各个"组"。
+    catchtouchmove="noop" 用于阻止整体棋盘的滚动手势。
+  -->
+  <view
+    class="puzzle-board"
+    style="width: {{boardW}}rpx; height: {{boardH}}rpx;"
+    catchtouchmove="noop"
+  >
+
+    <!--
+      第一层 wx:for：遍历 groups（每个 group 是一个"父容器"）。
+      - style 里只放：left/top（全局位置）+ width/height（包围盒）+ transform: translate(tx, ty)（拖拽平移）。
+      - 关键：transform 里绝对不出现 scale()。"scale 永远等于 1"是绝对尺寸锁定的硬性保证。
+      - ★ 事件不挂在 group 上,且 WXSS 里 .puzzle-group { pointer-events: none },
+        让矩形包围盒对触摸完全透明 —— 这样 L 形组合的"凹陷处"不会挡住下面的独立碎片。
+    -->
+    <view
+      wx:for="{{groups}}"
+      wx:for-item="group"
+      wx:key="id"
+      class="puzzle-group {{group.dragging ? 'dragging' : ''}} {{group.noTransition ? 'no-transition' : ''}} {{group.isCompound ? 'compound' : ''}}"
+      style="left: {{group.x}}rpx; top: {{group.y}}rpx; width: {{group.w}}rpx; height: {{group.h}}rpx; transform: translate({{group.tx}}rpx, {{group.ty}}rpx); z-index: {{group.dragging ? 100 : (group.isCompound ? 2 : 1)}};"
+      data-gid="{{group.id}}"
+    >
+
+      <!--
+        第二层 wx:for：组内子方块。
+        - style 里只放：left/top（相对父容器的"局部坐标" localX/Y）+ width/height（物理尺寸）+ border-radius + transform: translate(tx, ty)（残差补偿）。
+        - 局部坐标 = (myCol - minCol) * CELL_W,相邻块之间天然 0 缝。
+        - transform 同样不出现 scale()。
+        - ★ 事件挂在 piece 上：只有"真实有像素的方块"才会响应触摸。
+          - data-pid 带上当前 piece 的 id,handleTouchStart 据此反查它所在的组。
+          - WXSS 里 .puzzle-piece { pointer-events: auto } 保证子级能正常接管事件。
+      -->
+      <view
+        wx:for="{{group.pieces}}"
+        wx:for-item="piece"
+        wx:key="id"
+        class="puzzle-piece {{piece.noTransition ? 'no-transition' : ''}} {{group.isCompound ? 'in-group' : ''}}"
+        style="left: {{piece.localX}}rpx; top: {{piece.localY}}rpx; width: {{pieceW}}rpx; height: {{pieceH}}rpx; border-radius: {{piece.borderRadius}}; transform: translate({{piece.tx}}rpx, {{piece.ty}}rpx);"
+        data-pid="{{piece.id}}"
+        catchtouchstart="handleTouchStart"
+        catchtouchmove="handleTouchMove"
+        catchtouchend="handleTouchEnd"
+        catchtouchcancel="handleTouchEnd"
+      >
+        <!--
+          完整原图按整图大小渲染,再用 transform 把它平移到当前 piece 对应的"切片"上。
+          外层 piece 有 overflow:hidden（见 wxss）,所以只会显示对应切片区域。
+        -->
+        <image
+          class="puzzle-image"
+          src="{{imageUrl}}"
+          mode="aspectFill"
+          style="width: {{imgW}}rpx; height: {{imgH}}rpx; transform: translate({{piece.offsetX}}rpx, {{piece.offsetY}}rpx);"
+        />
+      </view>
+
+    </view>
+  </view>
+
+  <view class="action-buttons">
+    <button class="action-btn reset-btn" bindtap="resetPuzzle">重新开始</button>
+  </view>
+</view>
+
+<view wx:if="{{showSuccess}}" class="success-modal">
+  <view class="modal-content">
+    <text class="success-icon">🎉</text>
+    <text class="success-title">挑战成功！</text>
+    <text class="success-desc">恭喜你完成了拼图,共使用 {{moves}} 步</text>
+    <button class="success-btn" bindtap="handleSuccessClose">再玩一次</button>
+  </view>
+</view>
