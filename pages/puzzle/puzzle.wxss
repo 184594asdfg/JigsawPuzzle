@@ -67,6 +67,11 @@
   pointer-events: none;
 }
 
+.puzzle-group.compound {
+  z-index: 2;
+  /* 组容器仅作定位，不铺矩形图，形状由真实碎片拼出 */
+}
+
 .puzzle-group.no-transition {
   transition: none;
 }
@@ -88,10 +93,32 @@
   transition: none;
 }
 
-.piece-image-wrap {
-  position: relative;
+/* 融合组：每块独立裁切，仅真实碎片占位，不补齐外接矩形空角 */
+.puzzle-piece.in-compound {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.puzzle-piece.in-compound .piece-image-wrap.compound-cell {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: auto;
+  bottom: auto;
   width: 100%;
   height: 100%;
+  border-radius: 0;
+}
+
+.piece-image-wrap {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: auto;
+  height: auto;
   overflow: hidden;
   line-height: 0;
   font-size: 0;

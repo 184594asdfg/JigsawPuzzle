@@ -49,8 +49,8 @@ function computeLayout(windowWidth, N) {
     boardH: gridH + BOARD_PADDING * 2,
     stepX,
     stepY,
-    imgW: imageTileW * N,
-    imgH: imageTileH * N
+    imgW: cellW * N,
+    imgH: cellH * N
   }
 }
 
@@ -296,6 +296,8 @@ Page({
       const groupY = anchor.y
       const groupW = (maxCol - minCol + 1) * stepX - layout.GAP
       const groupH = (maxRow - minRow + 1) * stepY - layout.GAP
+      const isCompound = memberIds.length > 1
+      const memberSet = new Set(memberIds)
 
       const pieces = memberIds.map(id => {
         const m = piecesById[id]
@@ -307,8 +309,43 @@ Page({
 
         const oCol = m.originalIndex % N
         const oRow = Math.floor(m.originalIndex / N)
-        const offsetX = -oCol * layout.imageTileW
-        const offsetY = -oRow * layout.imageTileH
+        const inset = BORDER + PIECE_PADDING
+        const offsetX = isCompound
+          ? -oCol * layout.cellW
+          : -oCol * layout.cellW - inset
+        const offsetY = isCompound
+          ? -oRow * layout.cellH
+          : -oRow * layout.cellH - inset
+
+        const att = { top: false, right: false, bottom: false, left: false }
+        if (isCompound) {
+          for (const { dc, dr, key } of [
+            { dc: -1, dr: 0, key: 'left' },
+            { dc: 1, dr: 0, key: 'right' },
+            { dc: 0, dr: -1, key: 'top' },
+            { dc: 0, dr: 1, key: 'bottom' }
+          ]) {
+            const nCol = myCol + dc
+            const nRow = myRow + dr
+            if (nCol < 0 || nCol >= N || nRow < 0 || nRow >= N) continue
+            const neighbor = piecesBySlot[nRow * N + nCol]
+            if (!neighbor || !memberSet.has(neighbor.id)) continue
+            const nOCol = neighbor.originalIndex % N
+            const nORow = Math.floor(neighbor.originalIndex / N)
+            if (nOCol - oCol === dc && nORow - oRow === dr) att[key] = true
+          }
+        }
+
+        const sideBorder = (linked) =>
+          linked && isCompound ? '0' : '1px solid #000000'
+        const borderStyle = isCompound
+          ? `border-top:${sideBorder(att.top)};border-right:${sideBorder(att.right)};border-bottom:${sideBorder(att.bottom)};border-left:${sideBorder(att.left)};`
+          : ''
+        const tl = isCompound && (att.top || att.left) ? 0 : PIECE_RADIUS
+        const tr = isCompound && (att.top || att.right) ? 0 : PIECE_RADIUS
+        const br = isCompound && (att.bottom || att.right) ? 0 : PIECE_RADIUS
+        const bl = isCompound && (att.bottom || att.left) ? 0 : PIECE_RADIUS
+        const borderRadius = `${tl}px ${tr}px ${br}px ${bl}px`
 
         let tx = 0
         let ty = 0
@@ -328,6 +365,9 @@ Page({
           localY,
           offsetX,
           offsetY,
+          borderStyle,
+          borderRadius,
+          inCompound: isCompound,
           tx,
           ty,
           noTransition
@@ -346,7 +386,7 @@ Page({
         ty: 0,
         dragging: false,
         noTransition: !!preservedVisualByPieceId,
-        isCompound: pieces.length > 1,
+        isCompound,
         pieces
       }
     })

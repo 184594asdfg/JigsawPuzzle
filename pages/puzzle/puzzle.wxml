@@ -29,19 +29,19 @@
         wx:for="{{group.pieces}}"
         wx:for-item="piece"
         wx:key="id"
-        class="puzzle-piece {{piece.noTransition ? 'no-transition' : ''}}"
-        style="left: {{piece.localX}}px; top: {{piece.localY}}px; width: {{cellW}}px; height: {{cellH}}px; transform: translate({{piece.tx}}px, {{piece.ty}}px);"
+        class="puzzle-piece {{piece.noTransition ? 'no-transition' : ''}} {{piece.inCompound ? 'in-compound' : ''}}"
+        style="left: {{piece.localX}}px; top: {{piece.localY}}px; width: {{cellW}}px; height: {{cellH}}px; border-radius: {{piece.borderRadius}}; {{piece.borderStyle}} transform: translate({{piece.tx}}px, {{piece.ty}}px);"
         data-pid="{{piece.id}}"
         catchtouchstart="handleTouchStart"
         catchtouchmove="handleTouchMove"
         catchtouchend="handleTouchEnd"
         catchtouchcancel="handleTouchEnd"
       >
-        <view class="piece-image-wrap">
+        <view class="piece-image-wrap {{piece.inCompound ? 'compound-cell' : ''}}">
           <image
             class="puzzle-image"
             src="{{imageUrl}}"
-            mode="aspectFill"
+            mode="scaleToFill"
             style="width: {{imgW}}px; height: {{imgH}}px; transform: translate({{piece.offsetX}}px, {{piece.offsetY}}px);"
           />
         </view>
