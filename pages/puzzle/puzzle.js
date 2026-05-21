@@ -310,12 +310,6 @@ Page({
         const oCol = m.originalIndex % N
         const oRow = Math.floor(m.originalIndex / N)
         const inset = BORDER + PIECE_PADDING
-        const offsetX = isCompound
-          ? -oCol * layout.cellW
-          : -oCol * layout.cellW - inset
-        const offsetY = isCompound
-          ? -oRow * layout.cellH
-          : -oRow * layout.cellH - inset
 
         const att = { top: false, right: false, bottom: false, left: false }
         if (isCompound) {
@@ -336,16 +330,46 @@ Page({
           }
         }
 
+        const sideVal = (linked) =>
+          linked && isCompound ? '0' : `${PIECE_PADDING}px`
         const sideBorder = (linked) =>
           linked && isCompound ? '0' : '1px solid #000000'
-        const borderStyle = isCompound
-          ? `border-top:${sideBorder(att.top)};border-right:${sideBorder(att.right)};border-bottom:${sideBorder(att.bottom)};border-left:${sideBorder(att.left)};`
-          : ''
-        const tl = isCompound && (att.top || att.left) ? 0 : PIECE_RADIUS
-        const tr = isCompound && (att.top || att.right) ? 0 : PIECE_RADIUS
-        const br = isCompound && (att.bottom || att.right) ? 0 : PIECE_RADIUS
-        const bl = isCompound && (att.bottom || att.left) ? 0 : PIECE_RADIUS
-        const borderRadius = `${tl}px ${tr}px ${br}px ${bl}px`
+
+        let paddingStyle = ''
+        let wrapStyle = ''
+        let borderStyle = ''
+        let borderRadius = ''
+        let offsetX = -oCol * layout.cellW - inset
+        let offsetY = -oRow * layout.cellH - inset
+
+        if (isCompound) {
+          const leftInset = att.left ? 0 : inset
+          const topInset = att.top ? 0 : inset
+          offsetX = -oCol * layout.cellW - leftInset
+          offsetY = -oRow * layout.cellH - topInset
+
+          paddingStyle =
+            `padding-top:${sideVal(att.top)};padding-right:${sideVal(att.right)};` +
+            `padding-bottom:${sideVal(att.bottom)};padding-left:${sideVal(att.left)};`
+          borderStyle =
+            `border-top:${sideBorder(att.top)};border-right:${sideBorder(att.right)};` +
+            `border-bottom:${sideBorder(att.bottom)};border-left:${sideBorder(att.left)};`
+
+          const tl = att.top || att.left ? 0 : PIECE_RADIUS
+          const tr = att.top || att.right ? 0 : PIECE_RADIUS
+          const br = att.bottom || att.right ? 0 : PIECE_RADIUS
+          const bl = att.bottom || att.left ? 0 : PIECE_RADIUS
+          borderRadius = `${tl}px ${tr}px ${br}px ${bl}px`
+
+          const wrap = (linked) => (linked ? '0' : `${PIECE_PADDING}px`)
+          const wtl = att.top || att.left ? 0 : PIECE_RADIUS
+          const wtr = att.top || att.right ? 0 : PIECE_RADIUS
+          const wbr = att.bottom || att.right ? 0 : PIECE_RADIUS
+          const wbl = att.bottom || att.left ? 0 : PIECE_RADIUS
+          wrapStyle =
+            `left:${wrap(att.left)};top:${wrap(att.top)};right:${wrap(att.right)};bottom:${wrap(att.bottom)};` +
+            `border-radius:${wtl}px ${wtr}px ${wbr}px ${wbl}px;`
+        }
 
         let tx = 0
         let ty = 0
@@ -365,8 +389,10 @@ Page({
           localY,
           offsetX,
           offsetY,
+          paddingStyle,
           borderStyle,
           borderRadius,
+          wrapStyle,
           inCompound: isCompound,
           tx,
           ty,

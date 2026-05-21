@@ -30,14 +30,14 @@
         wx:for-item="piece"
         wx:key="id"
         class="puzzle-piece {{piece.noTransition ? 'no-transition' : ''}} {{piece.inCompound ? 'in-compound' : ''}}"
-        style="left: {{piece.localX}}px; top: {{piece.localY}}px; width: {{cellW}}px; height: {{cellH}}px; border-radius: {{piece.borderRadius}}; {{piece.borderStyle}} transform: translate({{piece.tx}}px, {{piece.ty}}px);"
+        style="left: {{piece.localX}}px; top: {{piece.localY}}px; width: {{cellW}}px; height: {{cellH}}px; border-radius: {{piece.borderRadius}}; {{piece.paddingStyle}} {{piece.borderStyle}} transform: translate({{piece.tx}}px, {{piece.ty}}px);"
         data-pid="{{piece.id}}"
         catchtouchstart="handleTouchStart"
         catchtouchmove="handleTouchMove"
         catchtouchend="handleTouchEnd"
         catchtouchcancel="handleTouchEnd"
       >
-        <view class="piece-image-wrap {{piece.inCompound ? 'compound-cell' : ''}}">
+        <view class="piece-image-wrap" style="{{piece.wrapStyle}}">
           <image
             class="puzzle-image"
             src="{{imageUrl}}"
