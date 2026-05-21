@@ -1,6 +1,8 @@
 .puzzle-container {
-  padding: 30rpx;
+  width: 100%;
+  padding: 30rpx 0;
   min-height: 100vh;
+  box-sizing: border-box;
 }
 
 .puzzle-header {
@@ -54,29 +56,14 @@
 
 .puzzle-board {
   position: relative;
-  margin: 0 auto;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 20rpx;
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
   touch-action: none;
 }
 
-/* ---------------------------------------------------------------
- * .puzzle-group —— 真正的"父容器"
- *   - absolute 定位，承担"组的全局位置 (left/top)"。
- *   - transform 只用 translate(tx, ty)，绝不出现 scale —— 绝对尺寸锁定。
- *   - transform-origin: 0 0，保证 translate 的参考系是左上角，不受元素尺寸影响。
- *   - 默认开 transition；拖拽中用 .no-transition 关掉。
- * --------------------------------------------------------------- */
 .puzzle-group {
   position: absolute;
   transform-origin: 0 0;
   transition: transform 0.22s ease;
-  will-change: transform;
-  /* ★ 关键：父容器是"矩形包围盒",对于 L 形等非矩形组合,凹陷处会盖住
-   * 下面真实存在的独立碎片。pointer-events: none 让这块矩形 DOM 对
-   * 触摸事件完全透明 —— 触摸会"穿透"它,命中真正画着像素的下层 piece。
-   * 子元素 .puzzle-piece 通过 pointer-events: auto 显式接管事件。 */
   pointer-events: none;
 }
 
@@ -84,31 +71,16 @@
   transition: none;
 }
 
-.puzzle-group.dragging {
-  /* 拖拽中只改 z-index，物理尺寸 0 变化 */
-}
-
-/* ---------------------------------------------------------------
- * .puzzle-piece —— 子方块
- *   - absolute 定位，left/top 就是"相对父容器的局部坐标 (localX, localY)"。
- *   - 物理尺寸恒为 CELL_W × CELL_H（在 inline style 里设置）。
- *   - transform 只用 translate(tx, ty) —— 仅用于两阶段过渡的"残差补偿"。
- *   - 单块状态下用 inset box-shadow 模拟"切割感"（不占布局空间）；
- *     成组后 .in-group 撤掉这个 inset，达成"无缝拼图"效果。
- * --------------------------------------------------------------- */
 .puzzle-piece {
   position: absolute;
   overflow: hidden;
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+  padding: 1px;
+  border: 1px solid #000000;
+  border-radius: 4px;
   transform-origin: 0 0;
-  /* 单块的"切割辅助线"：1rpx inset 高光，纯视觉效果，不影响坐标 */
-  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.12);
-  transition: transform 0.22s ease, border-radius 0.18s ease, box-shadow 0.18s ease;
-  will-change: transform;
-  /* ★ 父容器 .puzzle-group 是 pointer-events: none,这里必须显式 auto,
-   * 才能让"真实画着像素的方块"接住触摸事件。
-   * 触摸命中的范围严格 = 该 piece 的矩形区域,绝不会扩大到包围盒。 */
+  transition: transform 0.22s ease;
   pointer-events: auto;
 }
 
@@ -116,19 +88,31 @@
   transition: none;
 }
 
-/* 组内的块去掉 inset 高光 —— 看上去就是连续的整张图 */
-.puzzle-piece.in-group {
-  box-shadow: none;
-}
-
-/* 拖拽中的整组浮起阴影：加在 piece 上而非 group 上，
- * 利用相邻 piece 互相遮挡，自然形成"组的外轮廓阴影"。 */
-.puzzle-group.dragging .puzzle-piece {
-  box-shadow: 0 10rpx 24rpx rgba(0, 0, 0, 0.42);
+.piece-image-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  line-height: 0;
+  font-size: 0;
+  border-radius: 2px;
 }
 
 .puzzle-image {
   display: block;
+  pointer-events: none;
+  vertical-align: top;
+}
+
+.puzzle-group.dragging .puzzle-piece {
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+}
+
+.slice-canvas {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  opacity: 0;
   pointer-events: none;
 }
 

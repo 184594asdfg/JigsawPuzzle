@@ -4,6 +4,19 @@
     <text class="subtitle">放松心情，享受拼图的乐趣</text>
   </view>
   
+  <view class="difficulty-bar">
+    <text class="difficulty-label">难度</text>
+    <view class="difficulty-options">
+      <view
+        wx:for="{{gridOptions}}"
+        wx:key="*this"
+        class="difficulty-chip {{gridSize === item ? 'active' : ''}}"
+        bindtap="selectGrid"
+        data-grid="{{item}}"
+      >{{item}}×{{item}}</view>
+    </view>
+  </view>
+
   <view class="gallery">
     <view 
       wx:for="{{images}}" 
@@ -22,7 +35,8 @@
   <view class="instructions">
     <text class="instruction-title">游戏规则</text>
     <view class="instruction-list">
-      <text class="instruction-item">• 点击或拖拽两个方块进行交换</text>
+      <text class="instruction-item">• 素材统一 840×1260 像素（2:3 竖图）</text>
+      <text class="instruction-item">• 拖拽方块交换位置，拼回原图即胜利</text>
       <text class="instruction-item">• 将所有方块恢复到正确位置</text>
       <text class="instruction-item">• 完成拼图即可挑战成功</text>
     </view>
