@@ -1,23 +1,22 @@
-/** 图库主题与关卡配置 */
-const LEVELS_PER_THEME = 6
-const DEFAULT_IMAGE = '/images/photo1.jpg'
-const DEFAULT_GRID = 4
+/** 图库主题与关卡配置（小游戏：使用包内相对路径，不带前导 /） */
+var LEVELS_PER_THEME = 6
+var DEFAULT_IMAGE = 'images/photo1.jpg'
+var DEFAULT_GRID = 4
 
 /** 图集主题卡片 240×337 → images/themes/ */
-const THEME_CARD_UNLOCKED = '/images/themes/theme-unlocked.png'
-const THEME_CARD_LOCKED = '/images/themes/theme-locked.png'
-/** 主题详情：未完成关卡缩略图占位 → images/themes/level-placeholder.png */
-const LEVEL_THUMB_PLACEHOLDER = '/images/themes/level-placeholder.png'
+var THEME_CARD_UNLOCKED = 'images/themes/theme-unlocked.png'
+var THEME_CARD_LOCKED = 'images/themes/theme-locked.png'
+/** 主题详情：未完成关卡缩略图占位 */
+var LEVEL_THUMB_PLACEHOLDER = 'images/themes/level-placeholder.png'
 
-/** 已放入 images/ 的拼图原图，按关卡序号循环使用 */
-const PUZZLE_IMAGES = [
-  '/images/photo1.jpg',
-  '/images/photo2.jpg',
-  '/images/photo3.jpg',
-  '/images/photo4.jpg'
+var PUZZLE_IMAGES = [
+  'images/photo1.jpg',
+  'images/photo2.jpg',
+  'images/photo3.jpg',
+  'images/photo4.jpg'
 ]
 
-const THEME_DEFS = [
+var THEME_DEFS = [
   { id: 'meme', name: '玩梗大王', icon: '🃏', accent: '#8FB8A8' },
   { id: 'comedy', name: '喜剧之王', icon: '🎭', accent: '#9BB5A8' },
   { id: 'movie', name: '经典影视', icon: '🎬', accent: '#7FAF9E' },
@@ -32,23 +31,25 @@ const THEME_DEFS = [
   { id: 'childhood', name: '童心未泯', icon: '🧸', accent: '#A0C2B2' }
 ]
 
-const LEVEL_NAMES = ['初识', '进阶', '挑战', '大师', '传奇', '终极']
+var LEVEL_NAMES = ['初识', '进阶', '挑战', '大师', '传奇', '终极']
 
 function buildLevels(themeId, themeName) {
-  return LEVEL_NAMES.map((suffix, i) => {
-    const level = i + 1
-    return {
-      key: `${themeId}_${level}`,
-      themeId,
-      level,
-      name: `${themeName}·${suffix}`,
+  var arr = []
+  for (var i = 0; i < LEVEL_NAMES.length; i++) {
+    var level = i + 1
+    arr.push({
+      key: themeId + '_' + level,
+      themeId: themeId,
+      level: level,
+      name: themeName + '·' + LEVEL_NAMES[i],
       image: PUZZLE_IMAGES[i % PUZZLE_IMAGES.length],
       grid: DEFAULT_GRID
-    }
-  })
+    })
+  }
+  return arr
 }
 
-const THEMES = THEME_DEFS.map(function (t) {
+var THEMES = THEME_DEFS.map(function (t) {
   return {
     id: t.id,
     name: t.name,
@@ -60,22 +61,31 @@ const THEMES = THEME_DEFS.map(function (t) {
 })
 
 function getThemeById(themeId) {
-  return THEMES.find(t => t.id === themeId) || null
+  for (var i = 0; i < THEMES.length; i++) {
+    if (THEMES[i].id === themeId) return THEMES[i]
+  }
+  return null
 }
 
 function getAllLevels() {
-  return THEMES.reduce((acc, t) => acc.concat(t.levels), [])
+  var all = []
+  for (var i = 0; i < THEMES.length; i++) {
+    for (var j = 0; j < THEMES[i].levels.length; j++) {
+      all.push(THEMES[i].levels[j])
+    }
+  }
+  return all
 }
 
 module.exports = {
-  LEVELS_PER_THEME,
-  DEFAULT_IMAGE,
-  DEFAULT_GRID,
-  THEME_CARD_UNLOCKED,
-  THEME_CARD_LOCKED,
-  LEVEL_THUMB_PLACEHOLDER,
-  PUZZLE_IMAGES,
-  THEMES,
-  getThemeById,
-  getAllLevels
+  LEVELS_PER_THEME: LEVELS_PER_THEME,
+  DEFAULT_IMAGE: DEFAULT_IMAGE,
+  DEFAULT_GRID: DEFAULT_GRID,
+  THEME_CARD_UNLOCKED: THEME_CARD_UNLOCKED,
+  THEME_CARD_LOCKED: THEME_CARD_LOCKED,
+  LEVEL_THUMB_PLACEHOLDER: LEVEL_THUMB_PLACEHOLDER,
+  PUZZLE_IMAGES: PUZZLE_IMAGES,
+  THEMES: THEMES,
+  getThemeById: getThemeById,
+  getAllLevels: getAllLevels
 }

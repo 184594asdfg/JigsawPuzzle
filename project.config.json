@@ -1,19 +1,41 @@
 {
-  "description": "治愈系风景拼图小程序",
+  "description": "治愈系风景拼图小游戏",
+  "appid": "wxa1876a9bc898b18f",
+  "projectname": "JigsawPuzzle",
+  "compileType": "game",
+  "appType": "game",
+  "srcMiniprogramRoot": "",
+  "miniprogramRoot": "",
   "packOptions": {
     "include": [
       {
         "type": "glob",
-        "value": "videos/**"
+        "value": "audio/**"
       },
       {
         "type": "glob",
-        "value": "audio/**"
+        "value": "images/**"
+      }
+    ],
+    "ignore": [
+      {
+        "type": "folder",
+        "value": "docs"
+      },
+      {
+        "type": "folder",
+        "value": "videos"
+      },
+      {
+        "type": "regexp",
+        "value": "\\.md$"
       }
     ]
   },
   "setting": {
     "es6": true,
-    "minified": true
+    "minified": true,
+    "postcss": false,
+    "ignoreUploadUnusedFiles": true
   }
 }
