@@ -16,6 +16,10 @@ var PUZZLE_IMAGES = [
   'images/photo4.jpg'
 ]
 
+/**
+ * 每个主题对应一张 3:4 主题图，路径：images/themes/<id>.jpg
+ * 用于首页 3:4 浮层区域；若文件未提供，会自动 fallback 到 theme-unlocked 卡片图。
+ */
 var THEME_DEFS = [
   { id: 'meme', name: '玩梗大王', icon: '🃏', accent: '#8FB8A8' },
   { id: 'comedy', name: '喜剧之王', icon: '🎭', accent: '#9BB5A8' },
@@ -30,6 +34,9 @@ var THEME_DEFS = [
   { id: 'city', name: '都市印象', icon: '🌆', accent: '#7DAF9C' },
   { id: 'childhood', name: '童心未泯', icon: '🧸', accent: '#A0C2B2' }
 ]
+function themeImagePath(themeId) {
+  return 'images/themes/' + themeId + '.jpg'
+}
 
 var LEVEL_NAMES = ['初识', '进阶', '挑战', '大师', '传奇', '终极']
 
@@ -55,6 +62,7 @@ var THEMES = THEME_DEFS.map(function (t) {
     name: t.name,
     icon: t.icon,
     accent: t.accent,
+    themeImage: themeImagePath(t.id),
     totalLevels: LEVELS_PER_THEME,
     levels: buildLevels(t.id, t.name)
   }

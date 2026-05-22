@@ -219,9 +219,9 @@ GalleryScreen.prototype._drawThemeCard = function (ctx, item, x, y, w, h) {
   ctx.textAlign = 'left'
   ctx.lineWidth = rpx.rpx(2)
   ctx.strokeStyle = '#000000'
-  ctx.strokeText(badge, x + rpx.rpx(20), y + rpx.rpx(22))
+  ctx.strokeText(badge, x + rpx.rpx(33), y + rpx.rpx(35))
   ctx.fillStyle = '#ffffff'
-  ctx.fillText(badge, x + rpx.rpx(20), y + rpx.rpx(22))
+  ctx.fillText(badge, x + rpx.rpx(33), y + rpx.rpx(35))
 
   // 底部主题名
   draw.fillTextCentered(

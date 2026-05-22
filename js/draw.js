@@ -89,6 +89,39 @@ function fillTextRight(ctx, text, x, y, font, color) {
   ctx.fillText(text, x, y)
 }
 
+/**
+ * 居中绘制文本，支持字符间距（兼容所有 Canvas 2D 环境，不依赖 ctx.letterSpacing）。
+ * 逐字符绘制，按 measureText 累加宽度。
+ */
+function fillTextCenteredSpacing(ctx, text, cx, cy, font, color, letterSpacing) {
+  ctx.font = font
+  ctx.fillStyle = color
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  if (!letterSpacing) {
+    var prevAlign = ctx.textAlign
+    ctx.textAlign = 'center'
+    ctx.fillText(text, cx, cy)
+    ctx.textAlign = prevAlign
+    return
+  }
+  var chars = Array.from(text || '')
+  if (chars.length === 0) return
+  var widths = []
+  var totalW = 0
+  for (var i = 0; i < chars.length; i++) {
+    var wch = ctx.measureText(chars[i]).width
+    widths.push(wch)
+    totalW += wch
+  }
+  totalW += letterSpacing * (chars.length - 1)
+  var x = cx - totalW / 2
+  for (var j = 0; j < chars.length; j++) {
+    ctx.fillText(chars[j], x, cy)
+    x += widths[j] + letterSpacing
+  }
+}
+
 /** 截断超长文本（按字符，简单做） */
 function ellipsize(ctx, text, maxWidth) {
   if (!text) return ''
@@ -121,6 +154,7 @@ function drawNavArrow(ctx, cx, cy, size, color, lineWidth) {
 }
 
 module.exports = {
+  fillTextCenteredSpacing: fillTextCenteredSpacing,
   roundedRectPath: roundedRectPath,
   roundedRectPathCorners: roundedRectPathCorners,
   fillRoundedRect: fillRoundedRect,

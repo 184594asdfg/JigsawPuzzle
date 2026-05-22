@@ -6,6 +6,8 @@ var rpx = require('../rpx')
 var assets = require('../assets')
 var draw = require('../draw')
 var rankData = require('../../utils/rank-data')
+var galleryData = require('../../utils/gallery-data')
+var progress = require('../../utils/progress')
 
 var HOME_BG = 'images/home-bg.jpg'
 var HOME_HERO = 'images/home-hero.png'
@@ -13,8 +15,22 @@ var ICON_RANK = 'images/icons/rank.png'
 var ICON_LEVEL = 'images/icons/level.png'
 var ICON_GALLERY = 'images/icons/gallery.png'
 
-var DEFAULT_IMAGE = 'images/photo1.jpg'
-var DEFAULT_GRID = 4
+// 底部按钮尺寸
+var SIDE_BTN_SIZE_RPX = 140
+var MAIN_BTN_W_RPX = 350
+var MAIN_BTN_H_RPX = 170
+var BOTTOM_BAR_TOP_GAP_RPX = 8
+function bottomBarHeightRpx() {
+  return Math.max(SIDE_BTN_SIZE_RPX, MAIN_BTN_H_RPX) + BOTTOM_BAR_TOP_GAP_RPX
+}
+
+// 按钮栏与屏幕底部的距离（只影响按钮位置）
+var BOTTOM_BAR_BOTTOM_PADDING_RPX = 100
+// hero 居中区域距屏幕底部的距离（只影响 hero 的居中范围，与按钮位置解耦）
+var HERO_AREA_BOTTOM_PADDING_RPX = 40
+
+// hero 上方浮层 3:4 区域（宽:高 = 3:4，叠在 hero 顶部，距 hero 左/右/上 等距）
+var TOP_AREA_INSET_RPX = 32      // 距 hero 左/右/上 三边的统一内缩
 
 function HomeScreen() {
   BaseScreen.call(this)
@@ -74,14 +90,56 @@ HomeScreen.prototype.render = function (ctx) {
   )
   ctx.restore()
 
-  // 中部主视觉
-  var heroTop = rpx.safeTop() + rpx.rpx(150)
-  var heroBottom = H - rpx.safeBottom() - rpx.rpx(200)
-  var heroAreaH = Math.max(rpx.rpx(200), heroBottom - heroTop)
+  // 中部主视觉：固定长宽比 5:7，在「品牌文字下方」到「hero 区底边」之间居中
+  var brandBottom = rpx.safeTop() + rpx.rpx(80)
+  var heroAreaBottom =
+    H - rpx.safeBottom() - rpx.rpx(HERO_AREA_BOTTOM_PADDING_RPX) - rpx.rpx(bottomBarHeightRpx())
   var heroAreaW = W - rpx.rpx(48)
+  var heroAreaH = Math.max(rpx.rpx(200), heroAreaBottom - brandBottom)
+  var heroX = 0, heroY = 0, heroW = 0, heroH = 0
   var hero = assets.get(HOME_HERO)
   if (hero) {
-    draw.drawImageContain(ctx, hero, rpx.rpx(24), heroTop, heroAreaW, heroAreaH)
+    var HERO_ASPECT = 5 / 7
+    if (heroAreaW / heroAreaH > HERO_ASPECT) {
+      heroH = heroAreaH
+      heroW = heroH * HERO_ASPECT
+    } else {
+      heroW = heroAreaW
+      heroH = heroW / HERO_ASPECT
+    }
+    heroX = (W - heroW) / 2
+    heroY = brandBottom + (heroAreaH - heroH) / 2
+    ctx.drawImage(hero, heroX, heroY, heroW, heroH)
+  }
+
+  // hero 上方浮层 3:4 区域（叠在 hero 顶部，距 hero 左/右/上 等距）
+  if (heroW > 0) {
+    var inset = rpx.rpx(TOP_AREA_INSET_RPX)
+    var topAreaX = heroX + inset
+    var topAreaY = heroY + inset
+    var topAreaW = heroW - inset * 2
+    var topAreaH = topAreaW * 4 / 3
+    this._drawTopArea(ctx, topAreaX, topAreaY, topAreaW, topAreaH)
+
+    // 主题名：在 3:4 拼图区底边 → hero 底边 之间的缝隙垂直居中
+    var next = progress.getNextLevel(galleryData.THEMES)
+    if (next && next.theme) {
+      var gapTop = topAreaY + topAreaH
+      var gapBottom = heroY + heroH
+      if (gapBottom > gapTop) {
+        var labelY = (gapTop + gapBottom) / 2
+        ctx.save()
+        ctx.shadowColor = 'rgba(0,0,0,0.45)'
+        ctx.shadowBlur = rpx.rpx(8)
+        ctx.shadowOffsetY = rpx.rpx(2)
+        draw.fillTextCenteredSpacing(
+          ctx, next.theme.name, heroX + heroW / 2, labelY,
+          '700 ' + rpx.rpx(48).toFixed(0) + 'px sans-serif', '#663f1f',
+          rpx.rpx(8)
+        )
+        ctx.restore()
+      }
+    }
   }
 
   // 底部三按钮
@@ -93,15 +151,116 @@ HomeScreen.prototype.render = function (ctx) {
   }
 }
 
+/**
+ * hero 上方 3:4 区域：
+ *   - 当前主题图（cover 填满，3:4）
+ *   - 上叠 4×4 拼图分块网格线（白色细描边）
+ *   - 区域下方居中显示主题名
+ */
+HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
+  var next = progress.getNextLevel(galleryData.THEMES)
+  var theme = next && next.theme ? next.theme : null
+
+  ctx.save()
+  // 圆角裁剪 + 占位底色（图未加载时显示）
+  draw.roundedRectPath(ctx, x, y, w, h, rpx.rpx(24))
+  ctx.clip()
+  ctx.fillStyle = 'rgba(255,255,255,0.06)'
+  ctx.fillRect(x, y, w, h)
+
+  // 主题图
+  var themeImg = null
+  if (theme && theme.themeImage) {
+    themeImg = assets.get(theme.themeImage)
+    if (!themeImg) assets.load(theme.themeImage)
+  }
+  if (themeImg) {
+    draw.drawImageCover(ctx, themeImg, x, y, w, h)
+  } else if (theme) {
+    // fallback：用主题卡片图
+    var fallback = assets.get(galleryData.THEME_CARD_UNLOCKED)
+    if (fallback) draw.drawImageCover(ctx, fallback, x, y, w, h)
+  }
+
+  // 4×4 拼图分块网格
+  this._drawPuzzleGrid(ctx, x, y, w, h, 4, 4)
+  ctx.restore()
+
+  // 外圈细描边
+  draw.strokeRoundedRect(
+    ctx, x + 0.5, y + 0.5, w - 1, h - 1,
+    rpx.rpx(24), 'rgba(255,255,255,0.16)', 1
+  )
+}
+
+/**
+ * 在指定矩形上叠加 cols×rows 的「带半圆凸起」的拼图块分隔线（经典 jigsaw 样式）。
+ * 每条内部分割线在每格中点带一个半圆凸/凹，朝向用确定性伪随机决定（不会闪烁）。
+ */
+HomeScreen.prototype._drawPuzzleGrid = function (ctx, x, y, w, h, cols, rows) {
+  var cellW = w / cols
+  var cellH = h / rows
+  var knobR = Math.min(cellW, cellH) * 0.16  // 凸起半径占格子的比例
+  var lineW = Math.max(1, rpx.rpx(2))
+
+  function dir(r, c, type) {
+    // 稳定伪随机，相同 (r,c,type) 总返回相同值
+    var hash = (r * 7 + c * 13 + (type === 'v' ? 1 : 17)) % 4
+    return hash < 2 ? 1 : -1
+  }
+
+  ctx.save()
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+  ctx.lineWidth = lineW
+  ctx.lineJoin = 'round'
+
+  // 垂直内部线（每条按 rows 段，每段中点带半圆）
+  for (var c = 0; c < cols - 1; c++) {
+    var lineX = x + cellW * (c + 1)
+    ctx.beginPath()
+    ctx.moveTo(lineX, y)
+    for (var r = 0; r < rows; r++) {
+      var top = y + cellH * r
+      var midY = top + cellH / 2
+      ctx.lineTo(lineX, midY - knobR)
+      // d=1 → 凸向右(顺时针)；d=-1 → 凸向左(逆时针)
+      var dv = dir(r, c, 'v')
+      ctx.arc(lineX, midY, knobR, -Math.PI / 2, Math.PI / 2, dv === -1)
+      ctx.lineTo(lineX, top + cellH)
+    }
+    ctx.stroke()
+  }
+
+  // 水平内部线
+  for (var rh = 0; rh < rows - 1; rh++) {
+    var lineY = y + cellH * (rh + 1)
+    ctx.beginPath()
+    ctx.moveTo(x, lineY)
+    for (var cc = 0; cc < cols; cc++) {
+      var left = x + cellW * cc
+      var midX = left + cellW / 2
+      ctx.lineTo(midX - knobR, lineY)
+      // dh=1 → 凸向下(逆时针)；dh=-1 → 凸向上(顺时针)
+      var dh = dir(rh, cc, 'h')
+      ctx.arc(midX, lineY, knobR, Math.PI, 0, dh === 1)
+      ctx.lineTo(left + cellW, lineY)
+    }
+    ctx.stroke()
+  }
+
+  ctx.restore()
+}
+
 HomeScreen.prototype._drawBottomBar = function (ctx, W, H) {
-  var sideSize = rpx.rpx(108)
-  var mainSize = rpx.rpx(168)
+  var sideSize = rpx.rpx(SIDE_BTN_SIZE_RPX)
+  var mainW = rpx.rpx(MAIN_BTN_W_RPX)
+  var mainH = rpx.rpx(MAIN_BTN_H_RPX)
   var paddingX = rpx.rpx(20)
-  var paddingBottom = rpx.safeBottom() + rpx.rpx(40)
-  var barTop = H - paddingBottom - mainSize - rpx.rpx(8)
+  var paddingBottom = rpx.safeBottom() + rpx.rpx(BOTTOM_BAR_BOTTOM_PADDING_RPX)
+  var barTop = H - paddingBottom - mainH - rpx.rpx(BOTTOM_BAR_TOP_GAP_RPX)
 
   var mainCx = W / 2
-  var mainCy = barTop + mainSize / 2
+  var mainCy = barTop + mainH / 2
 
   // 左：排行
   var leftCx = paddingX + sideSize / 2 + rpx.rpx(8)
@@ -126,23 +285,24 @@ HomeScreen.prototype._drawBottomBar = function (ctx, W, H) {
   this._sideButtonRects.gallery = rightRect
   this.addHitZone(rightRect, function () { self._openGallery() })
 
-  // 中：开始拼图
+  // 中：关卡 N（下一关）
   var icon = assets.get(ICON_LEVEL)
   if (icon) {
-    ctx.drawImage(icon, mainCx - mainSize / 2, mainCy - mainSize / 2, mainSize, mainSize)
+    ctx.drawImage(icon, mainCx - mainW / 2, mainCy - mainH / 2, mainW, mainH)
   }
+  var nextLevelNum = progress.countAllCompleted(galleryData.THEMES) + 1
   ctx.save()
   ctx.shadowColor = 'rgba(0,0,0,0.45)'
   ctx.shadowBlur = rpx.rpx(8)
   ctx.shadowOffsetY = rpx.rpx(2)
   draw.fillTextCentered(
-    ctx, '开始拼图', mainCx, mainCy,
-    '600 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', '#ffffff'
+    ctx, '关卡' + nextLevelNum, mainCx, mainCy,
+    '700 ' + rpx.rpx(56).toFixed(0) + 'px sans-serif', '#ffffff'
   )
   ctx.restore()
   var mainRect = {
-    x: mainCx - mainSize / 2, y: mainCy - mainSize / 2,
-    w: mainSize, h: mainSize
+    x: mainCx - mainW / 2, y: mainCy - mainH / 2,
+    w: mainW, h: mainH
   }
   this.addHitZone(mainRect, function () { self._startPuzzle() })
 }
@@ -462,10 +622,14 @@ HomeScreen.prototype._openGallery = function () {
 }
 HomeScreen.prototype._startPuzzle = function () {
   var PuzzleScreen = require('./puzzle-screen')
+  var next = progress.getNextLevel(galleryData.THEMES)
+  if (!next || !next.level) return
+  var lv = next.level
   this.manager.push(new PuzzleScreen({
-    image: DEFAULT_IMAGE,
-    grid: DEFAULT_GRID,
-    levelLabel: '关卡1'
+    image: lv.image,
+    grid: lv.grid || galleryData.DEFAULT_GRID,
+    levelKey: lv.key,
+    levelLabel: '关卡' + (next.globalIndex + 1)
   }))
 }
 
