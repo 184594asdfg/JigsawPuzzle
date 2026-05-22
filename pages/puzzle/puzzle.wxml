@@ -1,17 +1,25 @@
-<view class="puzzle-container">
-  <view class="puzzle-header">
-    <view class="back-btn" bindtap="goBack">
-      <text class="back-icon">←</text>
-      <text class="back-text">返回</text>
-    </view>
-    <view class="game-info">
-      <text class="moves-text">步数: {{moves}}</text>
-    </view>
-    <view class="shuffle-btn" bindtap="shufflePuzzle">
-      <text class="shuffle-icon">🔄</text>
+<view class="puzzle-page">
+  <view class="puzzle-load-mask" wx:if="{{pageLoading}}">
+    <view class="status-bar" style="height: {{statusBarHeight}}px;"></view>
+    <text class="puzzle-brand">吉吉拼图</text>
+    <view class="puzzle-load-center">
+      <text class="puzzle-load-tip">加载中...</text>
     </view>
   </view>
 
+  <view class="status-bar" style="height: {{statusBarHeight}}px;"></view>
+
+  <view class="puzzle-nav">
+    <view class="puzzle-nav-back" bindtap="goBack">
+      <view class="puzzle-nav-arrow"></view>
+    </view>
+    <view class="puzzle-nav-center">
+      <text class="puzzle-nav-title">{{navTitle}}</text>
+    </view>
+    <view class="puzzle-nav-right"></view>
+  </view>
+
+  <view class="puzzle-container">
   <view
     class="puzzle-board"
     style="width: {{boardW}}px; height: {{boardH}}px;"
@@ -82,13 +90,14 @@
   <view class="action-buttons">
     <button class="action-btn reset-btn" bindtap="resetPuzzle">重新开始</button>
   </view>
+  </view>
 </view>
 
 <view wx:if="{{showSuccess}}" class="success-modal">
   <view class="modal-content">
     <text class="success-icon">🎉</text>
     <text class="success-title">挑战成功！</text>
-    <text class="success-desc">恭喜你完成了拼图,共使用 {{moves}} 步</text>
+    <text class="success-desc">恭喜你完成了拼图</text>
     <button class="success-btn" bindtap="handleSuccessClose">再玩一次</button>
   </view>
 </view>

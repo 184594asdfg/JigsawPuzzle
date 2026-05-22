@@ -3,6 +3,12 @@ const LEVELS_PER_THEME = 6
 const DEFAULT_IMAGE = '/images/photo1.jpg'
 const DEFAULT_GRID = 4
 
+/** 图集主题卡片 240×337 → images/themes/ */
+const THEME_CARD_UNLOCKED = '/images/themes/theme-unlocked.png'
+const THEME_CARD_LOCKED = '/images/themes/theme-locked.png'
+/** 主题详情：未完成关卡缩略图占位 → images/themes/level-placeholder.png */
+const LEVEL_THUMB_PLACEHOLDER = '/images/themes/level-placeholder.png'
+
 /** 已放入 images/ 的拼图原图，按关卡序号循环使用 */
 const PUZZLE_IMAGES = [
   '/images/photo1.jpg',
@@ -65,6 +71,9 @@ module.exports = {
   LEVELS_PER_THEME,
   DEFAULT_IMAGE,
   DEFAULT_GRID,
+  THEME_CARD_UNLOCKED,
+  THEME_CARD_LOCKED,
+  LEVEL_THUMB_PLACEHOLDER,
   PUZZLE_IMAGES,
   THEMES,
   getThemeById,

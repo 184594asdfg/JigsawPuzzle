@@ -11,8 +11,8 @@ var ICON_RANK = '/images/icons/rank.png'
 var ICON_LEVEL = '/images/icons/level.png'
 var ICON_GALLERY = '/images/icons/gallery.png'
 
-function buildRankList() {
-  var list = rankData.LEADERBOARD
+function buildRankView(tab) {
+  var list = rankData.getLeaderboard(tab)
   var rows = []
   for (var i = 0; i < list.length; i++) {
     var item = list[i]
@@ -23,21 +23,59 @@ function buildRankList() {
       time: item.time
     })
   }
-  return rows
+  return {
+    rankList: rows,
+    rankTop3: rows.slice(0, 3),
+    myRank: rankData.getMyRank(tab)
+  }
 }
+
+var DEFAULT_RANK_TAB = 'friends'
+var defaultRankView = buildRankView(DEFAULT_RANK_TAB)
 
 Page({
   data: {
+    statusBarHeight: 20,
+    homeReady: false,
     homeBg: HOME_BG,
     homeHero: HOME_HERO,
     iconRank: ICON_RANK,
     iconLevel: ICON_LEVEL,
     iconGallery: ICON_GALLERY,
     showRank: false,
-    rankList: buildRankList(),
-    rankTop3: buildRankList().slice(0, 3),
-    myRank: rankData.MY_RANK,
-    rankTab: 'week'
+    rankTab: DEFAULT_RANK_TAB,
+    rankList: defaultRankView.rankList,
+    rankTop3: defaultRankView.rankTop3,
+    myRank: defaultRankView.myRank
+  },
+
+  onLoad: function () {
+    var statusBarHeight = 20
+    try {
+      var info = wx.getSystemInfoSync()
+      statusBarHeight = info.statusBarHeight || 20
+    } catch (e) {
+      /* ignore */
+    }
+    this._homeBgLoaded = false
+    this._homeHeroLoaded = false
+    this.setData({ statusBarHeight: statusBarHeight, homeReady: false })
+  },
+
+  onHomeBgLoad: function () {
+    this._homeBgLoaded = true
+    this.checkHomeImagesReady()
+  },
+
+  onHomeHeroLoad: function () {
+    this._homeHeroLoaded = true
+    this.checkHomeImagesReady()
+  },
+
+  checkHomeImagesReady: function () {
+    if (this._homeBgLoaded && this._homeHeroLoaded) {
+      this.setData({ homeReady: true })
+    }
   },
 
   startPuzzle: function () {
@@ -57,7 +95,13 @@ Page({
   },
 
   openRank: function () {
-    this.setData({ showRank: true })
+    var view = buildRankView(this.data.rankTab || DEFAULT_RANK_TAB)
+    this.setData({
+      showRank: true,
+      rankList: view.rankList,
+      rankTop3: view.rankTop3,
+      myRank: view.myRank
+    })
   },
 
   closeRank: function () {
@@ -67,7 +111,13 @@ Page({
   switchRankTab: function (e) {
     var tab = e.currentTarget.dataset.tab
     if (tab === this.data.rankTab) return
-    this.setData({ rankTab: tab })
+    var view = buildRankView(tab)
+    this.setData({
+      rankTab: tab,
+      rankList: view.rankList,
+      rankTop3: view.rankTop3,
+      myRank: view.myRank
+    })
   },
 
   noop: function () {}

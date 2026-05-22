@@ -1,9 +1,20 @@
 <view class="home-page">
-  <image class="home-bg" src="{{homeBg}}" mode="aspectFill" />
+  <image class="home-bg" src="{{homeBg}}" mode="aspectFill" bindload="onHomeBgLoad" binderror="onHomeBgLoad" />
   <view class="home-bg-mask"></view>
 
+  <view class="home-header">
+    <view class="home-header-status" style="height: {{statusBarHeight}}px;"></view>
+    <text class="home-brand">吉吉拼图</text>
+  </view>
+
   <view class="home-hero-wrap">
-    <image class="home-hero" src="{{homeHero}}" mode="aspectFit" />
+    <image class="home-hero" src="{{homeHero}}" mode="aspectFit" bindload="onHomeHeroLoad" binderror="onHomeHeroLoad" />
+  </view>
+
+  <view class="home-load-mask" wx:if="{{!homeReady}}">
+    <view class="home-load-center">
+      <text class="home-load-tip">加载中...</text>
+    </view>
   </view>
 
   <view class="home-bottom-bar">
@@ -14,7 +25,10 @@
     </view>
     <view class="bottom-slot bottom-slot--center">
       <button class="home-icon-btn home-icon-btn--main" bindtap="startPuzzle">
-        <image class="home-icon home-icon--main" src="{{iconLevel}}" mode="aspectFit" />
+        <view class="home-main-btn">
+          <image class="home-icon home-icon--main" src="{{iconLevel}}" mode="aspectFit" />
+          <text class="home-main-label">开始拼图</text>
+        </view>
       </button>
     </view>
     <view class="bottom-slot bottom-slot--right">
@@ -34,15 +48,15 @@
 
       <view class="rank-tabs">
         <view
-          class="rank-tab {{rankTab === 'week' ? 'rank-tab--active' : ''}}"
+          class="rank-tab {{rankTab === 'friends' ? 'rank-tab--active' : ''}}"
           bindtap="switchRankTab"
-          data-tab="week"
-        >本周</view>
+          data-tab="friends"
+        >好友</view>
         <view
-          class="rank-tab {{rankTab === 'all' ? 'rank-tab--active' : ''}}"
+          class="rank-tab {{rankTab === 'national' ? 'rank-tab--active' : ''}}"
           bindtap="switchRankTab"
-          data-tab="all"
-        >总榜</view>
+          data-tab="national"
+        >全国</view>
       </view>
 
       <scroll-view class="rank-modal-scroll" scroll-y>

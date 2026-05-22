@@ -91,7 +91,10 @@ Page({
     mergeVideoX: 0,
     mergeVideoY: 0,
     mergeVideoW: 0,
-    mergeVideoH: 0
+    mergeVideoH: 0,
+    statusBarHeight: 20,
+    navTitle: '关卡1',
+    pageLoading: true
   },
 
   gridSize: 4,
@@ -107,12 +110,15 @@ Page({
   // =========================================================================
 
   onLoad(options) {
+    var statusBarHeight = 20
     try {
       const info = wx.getSystemInfoSync()
       this.windowWidth = info.windowWidth
+      statusBarHeight = info.statusBarHeight || 20
     } catch (err) {
       this.windowWidth = 375
     }
+    this.setData({ statusBarHeight: statusBarHeight })
 
     let grid = parseInt(options.grid, 10)
     if (Number.isNaN(grid) || grid < 3 || grid > 7) grid = 4
@@ -124,6 +130,9 @@ Page({
     if (this.themeId && this.levelId) {
       this._levelKey = `${this.themeId}_${this.levelId}`
     }
+    var levelNum = parseInt(this.levelId, 10)
+    if (Number.isNaN(levelNum) || levelNum < 1) levelNum = 1
+    this.setData({ navTitle: '关卡' + levelNum })
 
     if (options.image) {
       this.setData({ imageUrl: decodeURIComponent(options.image) })
@@ -195,9 +204,12 @@ Page({
   },
 
   bootstrapPuzzle() {
+    this.setData({ pageLoading: true })
     this.ensureImageSize(this.data.imageUrl)
       .then(() => this.initPuzzle())
-      .catch(() => {})
+      .catch(() => {
+        this.setData({ pageLoading: false })
+      })
   },
 
   /** 校验原图 840×1260；显示用「整图 + 格子偏移」，保证拼合为完整画面 */
@@ -247,7 +259,8 @@ Page({
       groups: this.buildGroups(),
       moves: 0,
       showSuccess: false,
-      showMergeFx: false
+      showMergeFx: false,
+      pageLoading: false
     })
   },
 

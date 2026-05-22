@@ -19,3 +19,7 @@
 ## 首页按钮图标
 
 见 **`images/icons/`** 目录：`rank.png`、`level.png`、`gallery.png`
+
+## 图集主题卡片（240×337）
+
+见 **`images/themes/`**：`theme-unlocked.png`、`theme-locked.png`、`level-placeholder.png`（详情页未完成关卡占位）
