@@ -23,6 +23,8 @@ const MERGE_FX_IMAGE = '/videos/merge_fx.png'
  * 棋盘外宽 = 屏宽×100%；内区 padding 12、块间距 GAP；
  * 单块 cellW×cellH（2:3），图片区 = 扣除 border+padding 后的内框。
  */
+const { markLevelComplete } = require('../../utils/progress')
+
 function computeLayout(windowWidth, N) {
   const boardOuterW = Math.floor(windowWidth * CONTAINER_RATIO)
   const gridInnerW = boardOuterW - BOARD_PADDING * 2
@@ -116,6 +118,12 @@ Page({
     if (Number.isNaN(grid) || grid < 3 || grid > 7) grid = 4
     this.gridSize = grid
     this.applyLayout()
+
+    this.themeId = options.theme || ''
+    this.levelId = options.level || ''
+    if (this.themeId && this.levelId) {
+      this._levelKey = `${this.themeId}_${this.levelId}`
+    }
 
     if (options.image) {
       this.setData({ imageUrl: decodeURIComponent(options.image) })
@@ -869,6 +877,7 @@ Page({
   checkWin() {
     const isWin = this._pieces.every(p => p.currentIndex === p.originalIndex)
     if (isWin) {
+      if (this._levelKey) markLevelComplete(this._levelKey)
       setTimeout(() => this.setData({ showSuccess: true }), 300)
     }
   },

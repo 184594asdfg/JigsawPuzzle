@@ -1,44 +1,94 @@
-<view class="home-container">
-  <view class="header">
-    <text class="title">治愈系风景拼图</text>
-    <text class="subtitle">放松心情，享受拼图的乐趣</text>
+<view class="home-page">
+  <image class="home-bg" src="{{homeBg}}" mode="aspectFill" />
+  <view class="home-bg-mask"></view>
+
+  <view class="home-hero-wrap">
+    <image class="home-hero" src="{{homeHero}}" mode="aspectFit" />
   </view>
-  
-  <view class="difficulty-bar">
-    <text class="difficulty-label">难度</text>
-    <view class="difficulty-options">
-      <view
-        wx:for="{{gridOptions}}"
-        wx:key="*this"
-        class="difficulty-chip {{gridSize === item ? 'active' : ''}}"
-        bindtap="selectGrid"
-        data-grid="{{item}}"
-      >{{item}}×{{item}}</view>
+
+  <view class="home-bottom-bar">
+    <view class="bottom-slot bottom-slot--left">
+      <button class="home-icon-btn" bindtap="openRank">
+        <image class="home-icon home-icon--side" src="{{iconRank}}" mode="aspectFit" />
+      </button>
+    </view>
+    <view class="bottom-slot bottom-slot--center">
+      <button class="home-icon-btn home-icon-btn--main" bindtap="startPuzzle">
+        <image class="home-icon home-icon--main" src="{{iconLevel}}" mode="aspectFit" />
+      </button>
+    </view>
+    <view class="bottom-slot bottom-slot--right">
+      <button class="home-icon-btn" bindtap="openGallery">
+        <image class="home-icon home-icon--side" src="{{iconGallery}}" mode="aspectFit" />
+      </button>
     </view>
   </view>
 
-  <view class="gallery">
-    <view 
-      wx:for="{{images}}" 
-      wx:key="id" 
-      class="image-card"
-      bindtap="startPuzzle"
-      data-image="{{item.url}}"
-    >
-      <image class="preview-image" src="{{item.url}}" mode="aspectFill" />
-      <view class="image-overlay">
-        <text class="image-title">{{item.name}}</text>
+  <!-- 排行榜弹框 -->
+  <view class="rank-mask" wx:if="{{showRank}}" bindtap="closeRank">
+    <view class="rank-modal" catchtap="noop">
+      <view class="rank-modal-header">
+        <text class="rank-modal-title">排行</text>
+        <view class="rank-modal-close" bindtap="closeRank">×</view>
       </view>
-    </view>
-  </view>
-  
-  <view class="instructions">
-    <text class="instruction-title">游戏规则</text>
-    <view class="instruction-list">
-      <text class="instruction-item">• 素材统一 840×1260 像素（2:3 竖图）</text>
-      <text class="instruction-item">• 拖拽方块交换位置，拼回原图即胜利</text>
-      <text class="instruction-item">• 将所有方块恢复到正确位置</text>
-      <text class="instruction-item">• 完成拼图即可挑战成功</text>
+
+      <view class="rank-tabs">
+        <view
+          class="rank-tab {{rankTab === 'week' ? 'rank-tab--active' : ''}}"
+          bindtap="switchRankTab"
+          data-tab="week"
+        >本周</view>
+        <view
+          class="rank-tab {{rankTab === 'all' ? 'rank-tab--active' : ''}}"
+          bindtap="switchRankTab"
+          data-tab="all"
+        >总榜</view>
+      </view>
+
+      <scroll-view class="rank-modal-scroll" scroll-y>
+        <view class="rank-podium">
+          <view class="podium-item">
+            <text class="podium-medal">🥈</text>
+            <text class="podium-name">{{rankTop3[1].name}}</text>
+            <text class="podium-score">{{rankTop3[1].levels}}关</text>
+            <view class="podium-bar podium-bar--2"></view>
+          </view>
+          <view class="podium-item podium-item--first">
+            <text class="podium-medal">🥇</text>
+            <text class="podium-name">{{rankTop3[0].name}}</text>
+            <text class="podium-score">{{rankTop3[0].levels}}关</text>
+            <view class="podium-bar podium-bar--1"></view>
+          </view>
+          <view class="podium-item">
+            <text class="podium-medal">🥉</text>
+            <text class="podium-name">{{rankTop3[2].name}}</text>
+            <text class="podium-score">{{rankTop3[2].levels}}关</text>
+            <view class="podium-bar podium-bar--3"></view>
+          </view>
+        </view>
+
+        <view class="rank-list">
+          <view
+            wx:for="{{rankList}}"
+            wx:key="rank"
+            wx:if="{{item.rank > 3}}"
+            class="rank-row"
+          >
+            <text class="rank-num">{{item.rank}}</text>
+            <view class="rank-avatar">{{item.rank}}</view>
+            <view class="rank-info">
+              <text class="rank-name">{{item.name}}</text>
+              <text class="rank-meta">{{item.levels}}关 · {{item.time}}</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="rank-mine">
+        <text class="rank-mine-label">我的排名</text>
+        <text class="rank-mine-num">第 {{myRank.rank}} 名</text>
+        <text class="rank-mine-meta">{{myRank.name}} · {{myRank.levels}}关 · {{myRank.time}}</text>
+      </view>
     </view>
   </view>
 </view>

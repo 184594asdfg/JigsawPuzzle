@@ -1,0 +1,255 @@
+.gallery-page {
+  width: 100%;
+  min-height: 100vh;
+  background: #e8f2ef;
+  box-sizing: border-box;
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
+}
+
+.status-bar {
+  width: 100%;
+}
+
+.gallery-nav {
+  display: flex;
+  align-items: center;
+  height: 88rpx;
+  padding: 0 24rpx;
+  background: #e8f2ef;
+}
+
+.gallery-nav-back {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gallery-nav-arrow {
+  width: 20rpx;
+  height: 20rpx;
+  border-left: 4rpx solid #4a6b62;
+  border-bottom: 4rpx solid #4a6b62;
+  transform: rotate(45deg);
+}
+
+.gallery-nav-title {
+  flex: 1;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #3d5a52;
+}
+
+.gallery-nav-right {
+  width: 64rpx;
+}
+
+.difficulty-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  padding: 0 24rpx 16rpx;
+}
+
+.difficulty-label {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #3d5a52;
+  flex-shrink: 0;
+}
+
+.difficulty-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  flex: 1;
+}
+
+.difficulty-chip {
+  padding: 8rpx 18rpx;
+  border-radius: 24rpx;
+  font-size: 24rpx;
+  color: #6d8f84;
+  background: #d8ebe5;
+}
+
+.difficulty-chip--active {
+  background: #6da896;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.gallery-body {
+  padding: 0 20rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.gallery-section {
+  margin-bottom: 28rpx;
+}
+
+.gallery-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8rpx 4rpx 16rpx;
+}
+
+.gallery-section-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #3d5a52;
+}
+
+.gallery-section-progress {
+  font-size: 24rpx;
+  color: #7a9a90;
+}
+
+.level-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: -8rpx;
+}
+
+.level-card {
+  width: 33.333%;
+  box-sizing: border-box;
+  padding: 8rpx;
+}
+
+.level-thumb-box {
+  position: relative;
+  width: 100%;
+  border-radius: 16rpx;
+  overflow: hidden;
+  background: #d8ebe5;
+  box-shadow: 0 4rpx 16rpx rgba(61, 90, 82, 0.08);
+  border: 4rpx solid transparent;
+  box-sizing: border-box;
+}
+
+.level-card--selected .level-thumb-box {
+  border-color: #6da896;
+  box-shadow: 0 6rpx 20rpx rgba(77, 138, 118, 0.35);
+}
+
+.level-thumb {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.level-check {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  width: 40rpx;
+  height: 40rpx;
+  line-height: 40rpx;
+  text-align: center;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #ffffff;
+  background: #6da896;
+  border-radius: 50%;
+}
+
+.level-done-tag {
+  position: absolute;
+  left: 8rpx;
+  bottom: 8rpx;
+  font-size: 18rpx;
+  color: #ffffff;
+  padding: 4rpx 10rpx;
+  border-radius: 10rpx;
+  background: rgba(77, 138, 118, 0.88);
+}
+
+.level-name {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #3d5a52;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.level-meta {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  color: #8aa89c;
+  text-align: center;
+}
+
+.gallery-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 24rpx calc(20rpx + env(safe-area-inset-bottom));
+  background: #e8f2ef;
+  box-shadow: 0 -4rpx 20rpx rgba(61, 90, 82, 0.1);
+  box-sizing: border-box;
+  z-index: 10;
+}
+
+.gallery-footer-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.gallery-footer-name {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #3d5a52;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-footer-hint {
+  display: block;
+  font-size: 26rpx;
+  color: #8aa89c;
+}
+
+.gallery-footer-grid {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #7a9a90;
+}
+
+.gallery-start-btn {
+  flex-shrink: 0;
+  padding: 0 36rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #ffffff;
+  background: #6da896;
+  box-shadow: 0 8rpx 20rpx rgba(77, 138, 118, 0.3);
+}
+
+.gallery-start-btn--disabled {
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.gallery-start-btn:active {
+  opacity: 0.9;
+}
