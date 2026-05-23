@@ -23,7 +23,10 @@ BaseScreen.prototype.render = function (/* ctx */) {}
 BaseScreen.prototype._firstTouch = function (e) {
   var t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0])
   if (!t) return null
-  return { x: t.clientX, y: t.clientY, identifier: t.identifier }
+  // 小游戏 Canvas 优先用 x/y（逻辑像素）；部分环境仅有 clientX/clientY
+  var x = typeof t.x === 'number' ? t.x : t.clientX
+  var y = typeof t.y === 'number' ? t.y : t.clientY
+  return { x: x, y: y, identifier: t.identifier }
 }
 
 /** 注册按钮命中区：rect = {x,y,w,h}, handler = function() */

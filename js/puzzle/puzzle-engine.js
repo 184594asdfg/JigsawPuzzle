@@ -11,6 +11,7 @@
 var layoutMod = require('./layout')
 var assets = require('../assets')
 var draw = require('../draw')
+var settings = require('../../utils/settings')
 
 var SRC_IMAGE_W = 840
 var SRC_IMAGE_H = 1260
@@ -60,6 +61,7 @@ function PuzzleEngine(opts) {
   this._mergeFx = null    // {x,y,w,h,t0}
   this.onWin = opts.onWin || function () {}
   this.onAnyMove = opts.onAnyMove || function () {}
+  this.sfxEnabled = settings.get('sfx')
   this._initAudio()
   this._applyLayout()
 }
@@ -79,8 +81,11 @@ PuzzleEngine.prototype.destroy = function () {
   if (this._moveAudio) { this._moveAudio.destroy && this._moveAudio.destroy(); this._moveAudio = null }
   if (this._swapAudio) { this._swapAudio.destroy && this._swapAudio.destroy(); this._swapAudio = null }
 }
+PuzzleEngine.prototype.setSfxEnabled = function (enabled) {
+  this.sfxEnabled = !!enabled
+}
 PuzzleEngine.prototype._playSound = function (a) {
-  if (!a) return
+  if (!this.sfxEnabled || !a) return
   try { a.stop(); a.seek && a.seek(0); a.play() } catch (e) {}
 }
 

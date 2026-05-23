@@ -5,6 +5,7 @@ var BaseScreen = require('./base-screen')
 var rpx = require('../rpx')
 var assets = require('../assets')
 var draw = require('../draw')
+var settingsModal = require('../settings-modal')
 var rankData = require('../../utils/rank-data')
 var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
@@ -35,6 +36,7 @@ var TOP_AREA_INSET_RPX = 32      // 距 hero 左/右/上 三边的统一内缩
 function HomeScreen() {
   BaseScreen.call(this)
   this.showRank = false
+  this.showSettings = false
   this.rankTab = 'friends'
   this.rankScrollY = 0
   this._rankDrag = null
@@ -45,10 +47,12 @@ HomeScreen.prototype.constructor = HomeScreen
 
 HomeScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
+  settingsModal.preload()
 }
 
 HomeScreen.prototype.onResume = function () {
   this.showRank = false
+  this.showSettings = false
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +152,22 @@ HomeScreen.prototype.render = function (ctx) {
   // 排行榜弹窗
   if (this.showRank) {
     this._drawRankModal(ctx, W, H)
+  }
+
+  if (this.showSettings) {
+    this._drawSettingsModal(ctx, W, H)
+  }
+
+  // 设置图标始终显示（叠在弹窗遮罩之上）
+  var self = this
+  var navY = rpx.safeTop()
+  var navH = rpx.rpx(88)
+  settingsModal.drawNavIcon(ctx, navY, navH)
+  if (!this.showSettings) {
+    this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () {
+      self.showRank = false
+      self._openSettings()
+    })
   }
 }
 
@@ -557,6 +577,15 @@ HomeScreen.prototype.onTouchStart = function (e) {
   var t = this._firstTouch(e)
   if (!t) return
 
+  if (!this.showRank && !this.showSettings) {
+    var navY = rpx.safeTop()
+    var navH = rpx.rpx(88)
+    if (settingsModal.isNavHit(navY, navH, t.x, t.y)) {
+      this._pendingSettingsOpen = true
+      return
+    }
+  }
+
   if (this.showRank && this._rankListRect &&
     t.y >= this._rankListRect.y && t.y <= this._rankListRect.y + this._rankListRect.h &&
     t.x >= this._rankListRect.x && t.x <= this._rankListRect.x + this._rankListRect.w) {
@@ -586,6 +615,13 @@ HomeScreen.prototype.onTouchEnd = function (e) {
   var t = this._firstTouch(e)
   if (!t) return
 
+  if (this._pendingSettingsOpen) {
+    this._pendingSettingsOpen = false
+    this.showRank = false
+    this._openSettings()
+    return
+  }
+
   if (this._rankDrag) {
     var drag = this._rankDrag
     this._rankDrag = null
@@ -598,6 +634,7 @@ HomeScreen.prototype.onTouchEnd = function (e) {
 
 HomeScreen.prototype.onTouchCancel = function () {
   this._rankDrag = null
+  this._pendingSettingsOpen = false
 }
 
 // ---------------------------------------------------------------------------
@@ -610,6 +647,22 @@ HomeScreen.prototype._openRank = function () {
 }
 HomeScreen.prototype._closeRank = function () {
   this.showRank = false
+}
+HomeScreen.prototype._openSettings = function () {
+  this.showSettings = true
+  this._settingsCloseLockUntil = Date.now() + 400
+}
+HomeScreen.prototype._closeSettings = function () {
+  if (this._settingsCloseLockUntil && Date.now() < this._settingsCloseLockUntil) return
+  this.showSettings = false
+  this._settingsCloseLockUntil = 0
+}
+HomeScreen.prototype._drawSettingsModal = function (ctx, W, H) {
+  var self = this
+  settingsModal.drawModal(this, ctx, W, H, {
+    showActionButtons: false,
+    onClose: function () { self._closeSettings() }
+  })
 }
 HomeScreen.prototype._switchTab = function (tab) {
   if (tab === this.rankTab) return
