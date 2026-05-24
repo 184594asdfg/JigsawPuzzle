@@ -5,6 +5,7 @@ var rpx = require('./rpx')
 var assets = require('./assets')
 var draw = require('./draw')
 var settings = require('../utils/settings')
+var user = require('../utils/user')
 var bgm = require('./bgm')
 
 var NAV_ICON = 'images/icons/setting.png'
@@ -22,11 +23,7 @@ var MODAL_PAD_X_RPX = 72
 var MODAL_PAD_Y_RPX = 56
 var MODAL_MAX_WIDTH_RPX = 540
 
-var USER = {
-  name: '吉',
-  id: '123456',
-  avatarBg: 'images/settings/avatar-bg.png'
-}
+var AVATAR_BG = 'images/settings/avatar-bg.png'
 
 /** 开关显示区（862 设计稿）；资源图为 530×144 @2x */
 var ICON_W = 265
@@ -131,7 +128,7 @@ function getImageNoBg(path) {
 function preload() {
   assets.load(MODAL_IMAGE)
   assets.load(NAV_ICON)
-  assets.load(USER.avatarBg)
+  assets.load(AVATAR_BG)
   for (var i = 0; i < ICON_ROWS.length; i++) {
     assets.load(ICON_ROWS[i].offPath)
     assets.load(ICON_ROWS[i].onPath)
@@ -210,7 +207,8 @@ function drawOverlay(screen, ctx, modal, handlers) {
   var onToggle = handlers.onToggle
 
   var av = mapDesignRect(modal, ul.avatar.x, ul.avatar.y, ul.avatar.w, ul.avatar.h)
-  var avatarImg = assets.get(USER.avatarBg)
+  var display = user.getDisplayInfo()
+  var avatarImg = assets.get(AVATAR_BG)
   if (avatarImg) {
     ctx.save()
     ctx.beginPath()
@@ -229,13 +227,13 @@ function drawOverlay(screen, ctx, modal, handlers) {
   }
 
   draw.fillTextLeft(
-    ctx, USER.name,
+    ctx, display.name,
     modal.x + ul.name.x * sx, modal.y + ul.name.y * sx,
     '700 ' + Math.round(ul.name.font * sx) + 'px sans-serif', ul.name.color
   )
 
   draw.fillTextCentered(
-    ctx, 'id:' + USER.id,
+    ctx, 'id:' + display.id,
     modal.x + modal.w / 2, modal.y + ul.userId.y * sx,
     '600 ' + Math.round(ul.userId.font * sx) + 'px sans-serif', ul.userId.color
   )

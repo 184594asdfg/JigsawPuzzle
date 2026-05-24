@@ -1,43 +1,38 @@
-/** 图库主题与关卡配置（小游戏：使用包内相对路径，不带前导 /） */
+/**
+ * 图库主题与关卡（仅从接口加载，失败时用本地兜底）
+ */
+var jigsawApi = require('./jigsaw-api')
+
 var LEVELS_PER_THEME = 6
-var DEFAULT_IMAGE = 'images/photo1.jpg'
 var DEFAULT_GRID = 4
 
-/** 图集主题卡片 240×337 → images/themes/ */
 var THEME_CARD_UNLOCKED = 'images/themes/theme-unlocked.png'
 var THEME_CARD_LOCKED = 'images/themes/theme-locked.png'
-/** 主题详情：未完成关卡缩略图占位 */
 var LEVEL_THUMB_PLACEHOLDER = 'images/themes/level-placeholder.png'
-
-var PUZZLE_IMAGES = [
-  'images/photo1.jpg'
-]
-
-/**
- * 每个主题对应一张 3:4 主题图，路径：images/themes/<id>.jpg
- * 用于首页 3:4 浮层区域；若文件未提供，会自动 fallback 到 theme-unlocked 卡片图。
- */
-var THEME_DEFS = [
-  { id: 'meme', name: '玩梗大王', icon: '🃏', accent: '#8FB8A8' },
-  { id: 'comedy', name: '喜剧之王', icon: '🎭', accent: '#9BB5A8' },
-  { id: 'movie', name: '经典影视', icon: '🎬', accent: '#7FAF9E' },
-  { id: 'pet', name: '萌宠星球', icon: '🐾', accent: '#A5C4B4' },
-  { id: 'food', name: '美食图鉴', icon: '🍜', accent: '#8EC4B0' },
-  { id: 'nature', name: '自然风光', icon: '🏔', accent: '#7EB8A6' },
-  { id: 'anime', name: '动漫回忆', icon: '✨', accent: '#94BFAE' },
-  { id: 'sport', name: '体育竞技', icon: '⚽', accent: '#86B5A3' },
-  { id: 'art', name: '艺术典藏', icon: '🎨', accent: '#9AB8A9' },
-  { id: 'festival', name: '节日特辑', icon: '🎉', accent: '#8AB9A7' },
-  { id: 'city', name: '都市印象', icon: '🌆', accent: '#7DAF9C' },
-  { id: 'childhood', name: '童心未泯', icon: '🧸', accent: '#A0C2B2' }
-]
-function themeImagePath(themeId) {
-  return 'images/themes/' + themeId + '.jpg'
-}
 
 var LEVEL_NAMES = ['初识', '进阶', '挑战', '大师', '传奇', '终极']
 
-function buildLevels(themeId, themeName) {
+var FALLBACK_THEME_DEFS = [
+  { id: 'meme', name: '玩梗大王', icon: '🃏', accent: '#8FB8A8', imageFolder: 'meme' },
+  { id: 'comedy', name: '喜剧之王', icon: '🎭', accent: '#9BB5A8', imageFolder: 'comedy' },
+  { id: 'movie', name: '经典影视', icon: '🎬', accent: '#7FAF9E', imageFolder: 'movie' },
+  { id: 'pet', name: '萌宠星球', icon: '🐾', accent: '#A5C4B4', imageFolder: 'pet' },
+  { id: 'food', name: '美食图鉴', icon: '🍜', accent: '#8EC4B0', imageFolder: 'food' },
+  { id: 'nature', name: '自然风光', icon: '🏔', accent: '#7EB8A6', imageFolder: 'nature' },
+  { id: 'anime', name: '动漫回忆', icon: '✨', accent: '#94BFAE', imageFolder: 'anime' },
+  { id: 'sport', name: '体育竞技', icon: '⚽', accent: '#86B5A3', imageFolder: 'sport' },
+  { id: 'art', name: '艺术典藏', icon: '🎨', accent: '#9AB8A9', imageFolder: 'art' },
+  { id: 'festival', name: '节日特辑', icon: '🎉', accent: '#8AB9A7', imageFolder: 'festival' },
+  { id: 'city', name: '都市印象', icon: '🌆', accent: '#7DAF9C', imageFolder: 'city' },
+  { id: 'childhood', name: '童心未泯', icon: '🧸', accent: '#A0C2B2', imageFolder: 'childhood' }
+]
+
+var THEMES = []
+var loaded = false
+var fromApi = false
+var loadingPromise = null
+
+function buildFallbackLevels(themeId, themeName) {
   var arr = []
   for (var i = 0; i < LEVEL_NAMES.length; i++) {
     var level = i + 1
@@ -46,24 +41,103 @@ function buildLevels(themeId, themeName) {
       themeId: themeId,
       level: level,
       name: themeName + '·' + LEVEL_NAMES[i],
-      image: PUZZLE_IMAGES[i % PUZZLE_IMAGES.length],
+      image: 'images/photo1.jpg',
       grid: DEFAULT_GRID
     })
   }
   return arr
 }
 
-var THEMES = THEME_DEFS.map(function (t) {
+function buildFallbackThemes() {
+  return FALLBACK_THEME_DEFS.map(function (t) {
+    return {
+      id: t.id,
+      name: t.name,
+      icon: t.icon,
+      accent: t.accent,
+      imageFolder: t.imageFolder,
+      themeImage: 'images/themes/' + t.id + '.jpg',
+      totalLevels: LEVELS_PER_THEME,
+      levels: buildFallbackLevels(t.id, t.name)
+    }
+  })
+}
+
+function normalizeLevel(level, themeId) {
   return {
-    id: t.id,
-    name: t.name,
-    icon: t.icon,
-    accent: t.accent,
-    themeImage: themeImagePath(t.id),
-    totalLevels: LEVELS_PER_THEME,
-    levels: buildLevels(t.id, t.name)
+    key: level.key || level.levelKey || '',
+    themeId: level.themeId || themeId || '',
+    level: level.level != null ? level.level : (level.levelNum || 0),
+    name: level.name || '',
+    image: level.image || level.imageUrl || '',
+    grid: level.grid != null ? level.grid : (level.gridSize || DEFAULT_GRID)
   }
-})
+}
+
+function normalizeTheme(theme) {
+  var id = theme.id || theme.themeId || ''
+  var rawLevels = theme.levels || []
+  var levels = []
+  for (var i = 0; i < rawLevels.length; i++) {
+    levels.push(normalizeLevel(rawLevels[i], id))
+  }
+  return {
+    id: id,
+    name: theme.name || '',
+    icon: theme.icon || '',
+    accent: theme.accent || '',
+    imageFolder: theme.imageFolder || '',
+    themeImage: theme.themeImage || theme.theme_image_url || '',
+    totalLevels: theme.totalLevels != null ? theme.totalLevels : levels.length,
+    levels: levels
+  }
+}
+
+function setThemes(list, apiSource) {
+  THEMES.length = 0
+  for (var i = 0; i < list.length; i++) {
+    THEMES.push(normalizeTheme(list[i]))
+  }
+  loaded = true
+  fromApi = !!apiSource
+}
+
+function useFallback() {
+  setThemes(buildFallbackThemes(), false)
+  console.warn('[gallery-data] using local fallback themes')
+  return THEMES
+}
+
+function loadThemes() {
+  if (loadingPromise) return loadingPromise
+
+  loadingPromise = jigsawApi.fetchThemes().then(function (list) {
+    if (!list) list = []
+    setThemes(list, true)
+    console.log('[gallery-data] loaded from api, count:', list.length)
+    return THEMES
+  }).catch(function (err) {
+    console.warn('[gallery-data] api failed, use fallback', err)
+    return useFallback()
+  }).then(function (themes) {
+    loadingPromise = null
+    return themes
+  })
+
+  return loadingPromise
+}
+
+function getThemes() {
+  return THEMES
+}
+
+function isLoaded() {
+  return loaded
+}
+
+function isFromApi() {
+  return fromApi
+}
 
 function getThemeById(themeId) {
   for (var i = 0; i < THEMES.length; i++) {
@@ -82,15 +156,38 @@ function getAllLevels() {
   return all
 }
 
+function collectLevelImageUrls() {
+  var urls = []
+  var seen = {}
+  var levels = getAllLevels()
+  for (var i = 0; i < levels.length; i++) {
+    var src = levels[i].image
+    if (src && !seen[src]) {
+      seen[src] = true
+      urls.push(src)
+    }
+  }
+  for (var j = 0; j < THEMES.length; j++) {
+    var cover = THEMES[j].themeImage
+    if (cover && !seen[cover]) {
+      seen[cover] = true
+      urls.push(cover)
+    }
+  }
+  return urls
+}
+
 module.exports = {
   LEVELS_PER_THEME: LEVELS_PER_THEME,
-  DEFAULT_IMAGE: DEFAULT_IMAGE,
   DEFAULT_GRID: DEFAULT_GRID,
   THEME_CARD_UNLOCKED: THEME_CARD_UNLOCKED,
   THEME_CARD_LOCKED: THEME_CARD_LOCKED,
   LEVEL_THUMB_PLACEHOLDER: LEVEL_THUMB_PLACEHOLDER,
-  PUZZLE_IMAGES: PUZZLE_IMAGES,
-  THEMES: THEMES,
+  loadThemes: loadThemes,
+  getThemes: getThemes,
+  isLoaded: isLoaded,
+  isFromApi: isFromApi,
   getThemeById: getThemeById,
-  getAllLevels: getAllLevels
+  getAllLevels: getAllLevels,
+  collectLevelImageUrls: collectLevelImageUrls
 }

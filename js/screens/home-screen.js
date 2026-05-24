@@ -181,6 +181,7 @@ HomeScreen.prototype.onEnter = function (manager) {
 HomeScreen.prototype.onResume = function () {
   this.showRank = false
   this.showSettings = false
+  progress.loadFromServer()
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +233,7 @@ HomeScreen.prototype.render = function (ctx) {
   if (heroRect.w > 0 && topArea.w > 0) {
     this._drawTopArea(ctx, topArea.x, topArea.y, topArea.w, topArea.h)
 
-    var next = progress.getNextLevel(galleryData.THEMES)
+    var next = progress.getNextLevel(galleryData.getThemes())
     var label = layout.themeLabel
     if (next && next.theme && label.gapBottom > label.gapTop) {
       ctx.save()
@@ -277,7 +278,7 @@ HomeScreen.prototype.render = function (ctx) {
  *   - 区域下方居中显示主题名
  */
 HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
-  var next = progress.getNextLevel(galleryData.THEMES)
+  var next = progress.getNextLevel(galleryData.getThemes())
   var theme = next && next.theme ? next.theme : null
 
   ctx.save()
@@ -388,7 +389,7 @@ HomeScreen.prototype._drawBottomBar = function (ctx, layout) {
   if (icon) {
     ctx.drawImage(icon, main.x, main.y, main.w, main.h)
   }
-  var nextLevelNum = progress.countAllCompleted(galleryData.THEMES) + 1
+  var nextLevelNum = progress.countAllCompleted(galleryData.getThemes()) + 1
   ctx.save()
   ctx.shadowColor = 'rgba(0,0,0,0.45)'
   ctx.shadowBlur = rpx.rpx(8)
@@ -747,7 +748,7 @@ HomeScreen.prototype._openGallery = function () {
 }
 HomeScreen.prototype._startPuzzle = function () {
   var PuzzleScreen = require('./puzzle-screen')
-  var next = progress.getNextLevel(galleryData.THEMES)
+  var next = progress.getNextLevel(galleryData.getThemes())
   if (!next || !next.level) return
   var lv = next.level
   this.manager.push(new PuzzleScreen({

@@ -9,26 +9,30 @@
   "packOptions": {
     "include": [
       {
-        "type": "glob",
-        "value": "audio/**"
+        "value": "audio/**",
+        "type": "glob"
       },
       {
-        "type": "glob",
-        "value": "images/**"
+        "value": "images/**",
+        "type": "glob"
+      },
+      {
+        "value": "utils/**",
+        "type": "glob"
       }
     ],
     "ignore": [
       {
-        "type": "folder",
-        "value": "docs"
+        "value": "docs",
+        "type": "folder"
       },
       {
-        "type": "folder",
-        "value": "videos"
+        "value": "videos",
+        "type": "folder"
       },
       {
-        "type": "regexp",
-        "value": "\\.md$"
+        "value": "\\.md$",
+        "type": "regexp"
       }
     ]
   },
@@ -36,6 +40,28 @@
     "es6": true,
     "minified": true,
     "postcss": false,
-    "ignoreUploadUnusedFiles": true
-  }
+    "ignoreUploadUnusedFiles": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "enhance": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "simulatorPluginLibVersion": {},
+  "isGameTourist": false,
+  "editorSetting": {}
 }

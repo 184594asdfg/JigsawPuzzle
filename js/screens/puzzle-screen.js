@@ -47,7 +47,8 @@ function PuzzleScreen(opts) {
   BaseScreen.call(this)
   this.opts = opts || {}
   this.imageSrc = opts.image
-  this.gridSize = opts.grid || 4
+  this.gridSize = opts.grid != null ? Number(opts.grid) : 4
+  if (!this.gridSize || isNaN(this.gridSize)) this.gridSize = 4
   this.levelKey = opts.levelKey || ''
   this.levelLabel = opts.levelLabel || '拼图'
   this.engine = null

@@ -25,6 +25,7 @@ function GalleryScreen() {
   this.selectedTheme = ''
   this.currentTheme = null
   this.themes = []
+  this.dataLoading = false
   this.showFullscreen = false
   this.fullscreenImage = ''
   this.pulseKey = ''
@@ -39,17 +40,32 @@ GalleryScreen.prototype.constructor = GalleryScreen
 
 GalleryScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
-  this._refresh()
-  this._preloadLevelImages()
+  var self = this
+  this.dataLoading = true
   assets.load(NAV_BACK_ICON)
+  galleryData.loadThemes().then(function () {
+    self.dataLoading = false
+    self._refresh()
+    self._preloadLevelImages()
+  }).catch(function () {
+    self.dataLoading = false
+    self._refresh()
+  })
 }
 
 GalleryScreen.prototype.onResume = function () {
-  this._refresh()
+  var self = this
+  galleryData.loadThemes().then(function () {
+    return progress.loadFromServer()
+  }).then(function () {
+    self._refresh()
+  }).catch(function () {
+    self._refresh()
+  })
 }
 
 GalleryScreen.prototype._refresh = function () {
-  var defs = galleryData.THEMES
+  var defs = galleryData.getThemes()
   var list = []
   for (var i = 0; i < defs.length; i++) {
     var t = defs[i]
@@ -72,7 +88,8 @@ GalleryScreen.prototype._refresh = function () {
 }
 
 GalleryScreen.prototype._preloadLevelImages = function () {
-  assets.loadAll(galleryData.PUZZLE_IMAGES)
+  var urls = galleryData.collectLevelImageUrls()
+  if (urls.length) assets.loadAll(urls)
 }
 
 GalleryScreen.prototype._buildCurrentTheme = function (themeId) {
@@ -120,6 +137,14 @@ GalleryScreen.prototype.render = function (ctx) {
 
   ctx.fillStyle = BG
   ctx.fillRect(0, 0, W, H)
+
+  if (this.dataLoading || !galleryData.isLoaded()) {
+    draw.fillTextCentered(
+      ctx, '加载图集中...', W / 2, H / 2,
+      '400 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', TEXT_HEADER
+    )
+    return
+  }
 
   // 导航栏
   var navY = rpx.safeTop()
@@ -457,7 +482,7 @@ GalleryScreen.prototype._onTapLevel = function (level) {
     var PuzzleScreen = require('./puzzle-screen')
     self.manager.push(new PuzzleScreen({
       image: level.image,
-      grid: level.grid || 4,
+      grid: level.grid != null ? level.grid : galleryData.DEFAULT_GRID,
       levelKey: level.key,
       levelLabel: '关卡' + level.level
     }))

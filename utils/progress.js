@@ -1,28 +1,80 @@
-const STORAGE_PROGRESS = 'puzzle_level_progress'
+/**
+ * 关卡进度：本地缓存 + 服务端同步
+ */
+var jigsawApi = require('./jigsaw-api')
+var user = require('./user')
 
-function readProgressMap() {
+var STORAGE_PROGRESS = 'puzzle_level_progress'
+var progressMap = null
+var synced = false
+
+function readLocalMap() {
   try {
-    const raw = wx.getStorageSync(STORAGE_PROGRESS)
+    var raw = wx.getStorageSync(STORAGE_PROGRESS)
     return raw && typeof raw === 'object' ? raw : {}
   } catch (e) {
     return {}
   }
 }
 
-function writeProgressMap(map) {
+function writeLocalMap(map) {
   wx.setStorageSync(STORAGE_PROGRESS, map)
+}
+
+function ensureMap() {
+  if (!progressMap) progressMap = readLocalMap()
+  return progressMap
+}
+
+function mergeServerProgress(data) {
+  var keys = (data && data.completedKeys) ? data.completedKeys.slice() : []
+  if (!keys.length && data && data.progress) {
+    keys = Object.keys(data.progress).filter(function (k) {
+      return !!data.progress[k]
+    })
+  }
+  var map = {}
+  for (var i = 0; i < keys.length; i++) {
+    map[keys[i]] = true
+  }
+  progressMap = map
+  writeLocalMap(map)
+  synced = true
+  return map
+}
+
+function loadFromServer() {
+  var userId = user.getUserId()
+  if (!userId) {
+    ensureMap()
+    return Promise.resolve(ensureMap())
+  }
+  return jigsawApi.fetchProgress(userId).then(function (data) {
+    return mergeServerProgress(data)
+  }).catch(function (err) {
+    console.warn('[progress] load from server failed', err)
+    ensureMap()
+    return progressMap
+  })
 }
 
 function markLevelComplete(levelKey) {
   if (!levelKey) return
-  const map = readProgressMap()
-  if (map[levelKey]) return
+  var map = ensureMap()
+  var alreadyDone = !!map[levelKey]
   map[levelKey] = true
-  writeProgressMap(map)
+  writeLocalMap(map)
+
+  var userId = user.getUserId()
+  if (!userId) return
+  if (alreadyDone) return
+  jigsawApi.saveProgress(userId, levelKey).catch(function (err) {
+    console.warn('[progress] save to server failed', err)
+  })
 }
 
 function isLevelComplete(levelKey) {
-  return !!readProgressMap()[levelKey]
+  return !!ensureMap()[levelKey]
 }
 
 function countThemeCompleted(theme) {
@@ -34,9 +86,6 @@ function countThemeCompleted(theme) {
   return n
 }
 
-/**
- * 已完成的关卡总数（跨所有主题）
- */
 function countAllCompleted(themes) {
   if (!themes || !themes.length) return 0
   var n = 0
@@ -46,11 +95,6 @@ function countAllCompleted(themes) {
   return n
 }
 
-/**
- * 全局「下一关」：返回 themes 里第一个未完成的关卡对象（包含主题信息）。
- * 若所有关卡均已完成，则回到第一关。
- *   返回结构：{ theme, level, levelIndex, globalIndex }
- */
 function getNextLevel(themes) {
   if (!themes || !themes.length) return null
   var globalIdx = 0
@@ -78,9 +122,10 @@ function getNextLevel(themes) {
 }
 
 module.exports = {
-  markLevelComplete,
-  isLevelComplete,
-  countThemeCompleted,
-  countAllCompleted,
-  getNextLevel
+  loadFromServer: loadFromServer,
+  markLevelComplete: markLevelComplete,
+  isLevelComplete: isLevelComplete,
+  countThemeCompleted: countThemeCompleted,
+  countAllCompleted: countAllCompleted,
+  getNextLevel: getNextLevel
 }
