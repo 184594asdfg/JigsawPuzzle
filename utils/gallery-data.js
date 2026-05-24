@@ -10,10 +10,7 @@ var THEME_CARD_LOCKED = 'images/themes/theme-locked.png'
 var LEVEL_THUMB_PLACEHOLDER = 'images/themes/level-placeholder.png'
 
 var PUZZLE_IMAGES = [
-  'images/photo1.jpg',
-  'images/photo2.jpg',
-  'images/photo3.jpg',
-  'images/photo4.jpg'
+  'images/photo1.jpg'
 ]
 
 /**

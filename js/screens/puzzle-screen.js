@@ -25,10 +25,10 @@ var COUNTDOWN_ALARM_LEFT_RPX = 0
 var COUNTDOWN_TIME_OFFSET_X_RPX = 20
 var COUNTDOWN_ADD_MS = 60 * 1000
 
-/** 底部三个工具图标 */
+/** 底部三个工具图标：显示 124×138 rpx，资源 248×276 @2x */
 var BOTTOM_TOOL_W_RPX = 124
 var BOTTOM_TOOL_H_RPX = 138
-var BOTTOM_TOOL_GAP_RPX = 72
+var BOTTOM_TOOL_GAP_RPX = 96
 var BOTTOM_TOOL_BOTTOM_RPX = 48
 var BOTTOM_TOOLS = [
   { action: 'addTime', path: 'images/icons/add_time.png' },

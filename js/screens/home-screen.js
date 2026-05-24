@@ -16,22 +16,150 @@ var ICON_RANK = 'images/icons/rank.png'
 var ICON_LEVEL = 'images/icons/level.png'
 var ICON_GALLERY = 'images/icons/gallery.png'
 
-// 底部按钮尺寸
-var SIDE_BTN_SIZE_RPX = 140
-var MAIN_BTN_W_RPX = 350
-var MAIN_BTN_H_RPX = 170
+// 底部侧钮尺寸（排行 / 图库）
+var SIDE_BTN_W_RPX = 110
+var SIDE_BTN_H_RPX = 115
+/** 排行 / 图库相对中间关卡按钮的垂直下移（rpx），可分别调 */
+var SIDE_BTN_RANK_OFFSET_Y_RPX = 5
+var SIDE_BTN_GALLERY_OFFSET_Y_RPX = 12
+/** 侧钮与关卡按钮外缘的水平间距（rpx），越小越靠近中间 */
+var SIDE_BTN_GAP_FROM_MAIN_RPX = 16
+var MAIN_BTN_W_RPX = 360
+var MAIN_BTN_H_RPX = 138
 var BOTTOM_BAR_TOP_GAP_RPX = 8
-function bottomBarHeightRpx() {
-  return Math.max(SIDE_BTN_SIZE_RPX, MAIN_BTN_H_RPX) + BOTTOM_BAR_TOP_GAP_RPX
-}
 
 // 按钮栏与屏幕底部的距离（只影响按钮位置）
 var BOTTOM_BAR_BOTTOM_PADDING_RPX = 100
-// hero 居中区域距屏幕底部的距离（只影响 hero 的居中范围，与按钮位置解耦）
-var HERO_AREA_BOTTOM_PADDING_RPX = 40
+// hero 底边与底部按钮区顶边的间距
+var HERO_ABOVE_BAR_GAP_RPX = 0
 
-// hero 上方浮层 3:4 区域（宽:高 = 3:4，叠在 hero 顶部，距 hero 左/右/上 等距）
-var TOP_AREA_INSET_RPX = 32      // 距 hero 左/右/上 三边的统一内缩
+var BRAND_TITLE_TOP_RPX = 16
+var BRAND_AREA_BOTTOM_RPX = 80
+var HERO_AREA_H_PAD_RPX = 130
+var HERO_AREA_MIN_H_RPX = 100
+var HERO_ASPECT = 5 / 7
+/** hero 相对垂直居中的额外下移（rpx） */
+var HERO_OFFSET_Y_RPX = 20
+var NAV_BAR_H_RPX = 88
+// hero 上方浮层 3:4 区域（叠在 hero 顶部，距 hero 左/右/上 等距）
+var TOP_AREA_INSET_RPX = 32
+
+function getBottomBarMetrics(H) {
+  var sideW = rpx.rpx(SIDE_BTN_W_RPX)
+  var sideH = rpx.rpx(SIDE_BTN_H_RPX)
+  var mainH = rpx.rpx(MAIN_BTN_H_RPX)
+  var paddingBottom = rpx.safeBottom() + rpx.rpx(BOTTOM_BAR_BOTTOM_PADDING_RPX)
+  var barTop = H - paddingBottom - mainH - rpx.rpx(BOTTOM_BAR_TOP_GAP_RPX)
+  var mainCy = barTop + mainH / 2
+  var visualTop = Math.min(
+    barTop,
+    mainCy + rpx.rpx(SIDE_BTN_RANK_OFFSET_Y_RPX) - sideH / 2
+  )
+  return {
+    barTop: barTop,
+    visualTop: visualTop,
+    mainH: mainH,
+    sideW: sideW,
+    sideH: sideH,
+    paddingBottom: paddingBottom,
+    mainCy: mainCy
+  }
+}
+
+/**
+ * 首页布局（各机型共用）：先算顶/底锚点，再在中间区域 fit hero。
+ * @returns {object} brand, heroArea, hero, topArea, themeLabel, bottomBar, nav
+ */
+function layoutHome(W, H) {
+  var bar = getBottomBarMetrics(H)
+  var mainW = rpx.rpx(MAIN_BTN_W_RPX)
+
+  var brandTop = rpx.safeTop() + rpx.rpx(BRAND_TITLE_TOP_RPX)
+  var brandBottom = rpx.safeTop() + rpx.rpx(BRAND_AREA_BOTTOM_RPX)
+  var heroAreaBottom = bar.visualTop - rpx.rpx(HERO_ABOVE_BAR_GAP_RPX)
+  var heroAreaPad = rpx.rpx(HERO_AREA_H_PAD_RPX)
+  var heroAreaX = heroAreaPad / 2
+  var heroAreaW = W - heroAreaPad
+  var heroAreaH = Math.max(rpx.rpx(HERO_AREA_MIN_H_RPX), heroAreaBottom - brandBottom)
+  var heroAreaY = brandBottom
+
+  var heroW, heroH
+  if (heroAreaW / heroAreaH > HERO_ASPECT) {
+    heroH = heroAreaH
+    heroW = heroH * HERO_ASPECT
+  } else {
+    heroW = heroAreaW
+    heroH = heroW / HERO_ASPECT
+  }
+  if (heroH > heroAreaH) {
+    heroH = heroAreaH
+    heroW = heroH * HERO_ASPECT
+  }
+  if (heroW > heroAreaW) {
+    heroW = heroAreaW
+    heroH = heroW / HERO_ASPECT
+  }
+  var heroX = (W - heroW) / 2
+  var heroY = brandBottom + Math.max(0, (heroAreaH - heroH) / 2) + rpx.rpx(HERO_OFFSET_Y_RPX)
+  var heroYMax = brandBottom + heroAreaH - heroH
+  if (heroY > heroYMax) heroY = heroYMax
+
+  var inset = rpx.rpx(TOP_AREA_INSET_RPX)
+  var topAreaX = heroX + inset
+  var topAreaY = heroY + inset
+  var topAreaW = Math.max(0, heroW - inset * 2)
+  var topAreaH = topAreaW * 4 / 3
+
+  var mainCx = W / 2
+  var mainCy = bar.mainCy
+  var rankCy = mainCy + rpx.rpx(SIDE_BTN_RANK_OFFSET_Y_RPX)
+  var galleryCy = mainCy + rpx.rpx(SIDE_BTN_GALLERY_OFFSET_Y_RPX)
+  var halfMainW = mainW / 2
+  var halfMainH = bar.mainH / 2
+  var halfSideW = bar.sideW / 2
+  var halfSideH = bar.sideH / 2
+  var sideGap = rpx.rpx(SIDE_BTN_GAP_FROM_MAIN_RPX)
+  var mainLeft = mainCx - halfMainW
+  var mainRight = mainCx + halfMainW
+  var leftCx = mainLeft - sideGap - halfSideW
+  var rightCx = mainRight + sideGap + halfSideW
+
+  return {
+    W: W,
+    H: H,
+    brand: {
+      titleY: brandTop + rpx.rpx(24),
+      top: brandTop,
+      bottom: brandBottom
+    },
+    heroArea: { x: heroAreaX, y: heroAreaY, w: heroAreaW, h: heroAreaH },
+    hero: { x: heroX, y: heroY, w: heroW, h: heroH },
+    topArea: { x: topAreaX, y: topAreaY, w: topAreaW, h: topAreaH },
+    themeLabel: {
+      centerX: heroX + heroW / 2,
+      gapTop: topAreaY + topAreaH,
+      gapBottom: heroY + heroH,
+      y: (topAreaY + topAreaH + heroY + heroH) / 2
+    },
+    bottomBar: {
+      barTop: bar.barTop,
+      visualTop: bar.visualTop,
+      mainBtn: {
+        x: mainCx - halfMainW, y: mainCy - halfMainH,
+        w: mainW, h: bar.mainH, cx: mainCx, cy: mainCy
+      },
+      rankBtn: {
+        x: leftCx - halfSideW, y: rankCy - halfSideH,
+        w: bar.sideW, h: bar.sideH, cx: leftCx, cy: rankCy
+      },
+      galleryBtn: {
+        x: rightCx - halfSideW, y: galleryCy - halfSideH,
+        w: bar.sideW, h: bar.sideH, cx: rightCx, cy: galleryCy
+      }
+    },
+    nav: { y: rpx.safeTop(), h: rpx.rpx(NAV_BAR_H_RPX) }
+  }
+}
 
 function HomeScreen() {
   BaseScreen.call(this)
@@ -62,6 +190,7 @@ HomeScreen.prototype.onResume = function () {
 HomeScreen.prototype.render = function (ctx) {
   var W = rpx.windowWidth()
   var H = rpx.windowHeight()
+  var layout = layoutHome(W, H)
 
   this.resetHitZones()
 
@@ -83,71 +212,43 @@ HomeScreen.prototype.render = function (ctx) {
   ctx.fillRect(0, 0, W, H)
 
   // 顶部品牌
-  var topY = rpx.safeTop() + rpx.rpx(16)
   ctx.save()
   ctx.shadowColor = 'rgba(0,0,0,0.25)'
   ctx.shadowBlur = rpx.rpx(16)
   ctx.shadowOffsetY = rpx.rpx(4)
   draw.fillTextCentered(
-    ctx, '吉吉拼图', W / 2, topY + rpx.rpx(24),
+    ctx, '吉吉拼图', W / 2, layout.brand.titleY,
     '700 ' + rpx.rpx(48).toFixed(0) + 'px sans-serif', '#ffffff'
   )
   ctx.restore()
 
-  // 中部主视觉：固定长宽比 5:7，在「品牌文字下方」到「hero 区底边」之间居中
-  var brandBottom = rpx.safeTop() + rpx.rpx(80)
-  var heroAreaBottom =
-    H - rpx.safeBottom() - rpx.rpx(HERO_AREA_BOTTOM_PADDING_RPX) - rpx.rpx(bottomBarHeightRpx())
-  var heroAreaW = W - rpx.rpx(48)
-  var heroAreaH = Math.max(rpx.rpx(200), heroAreaBottom - brandBottom)
-  var heroX = 0, heroY = 0, heroW = 0, heroH = 0
+  var heroRect = layout.hero
   var hero = assets.get(HOME_HERO)
-  if (hero) {
-    var HERO_ASPECT = 5 / 7
-    if (heroAreaW / heroAreaH > HERO_ASPECT) {
-      heroH = heroAreaH
-      heroW = heroH * HERO_ASPECT
-    } else {
-      heroW = heroAreaW
-      heroH = heroW / HERO_ASPECT
-    }
-    heroX = (W - heroW) / 2
-    heroY = brandBottom + (heroAreaH - heroH) / 2
-    ctx.drawImage(hero, heroX, heroY, heroW, heroH)
+  if (hero && heroRect.w > 0) {
+    ctx.drawImage(hero, heroRect.x, heroRect.y, heroRect.w, heroRect.h)
   }
 
-  // hero 上方浮层 3:4 区域（叠在 hero 顶部，距 hero 左/右/上 等距）
-  if (heroW > 0) {
-    var inset = rpx.rpx(TOP_AREA_INSET_RPX)
-    var topAreaX = heroX + inset
-    var topAreaY = heroY + inset
-    var topAreaW = heroW - inset * 2
-    var topAreaH = topAreaW * 4 / 3
-    this._drawTopArea(ctx, topAreaX, topAreaY, topAreaW, topAreaH)
+  var topArea = layout.topArea
+  if (heroRect.w > 0 && topArea.w > 0) {
+    this._drawTopArea(ctx, topArea.x, topArea.y, topArea.w, topArea.h)
 
-    // 主题名：在 3:4 拼图区底边 → hero 底边 之间的缝隙垂直居中
     var next = progress.getNextLevel(galleryData.THEMES)
-    if (next && next.theme) {
-      var gapTop = topAreaY + topAreaH
-      var gapBottom = heroY + heroH
-      if (gapBottom > gapTop) {
-        var labelY = (gapTop + gapBottom) / 2
-        ctx.save()
-        ctx.shadowColor = 'rgba(0,0,0,0.45)'
-        ctx.shadowBlur = rpx.rpx(8)
-        ctx.shadowOffsetY = rpx.rpx(2)
-        draw.fillTextCenteredSpacing(
-          ctx, next.theme.name, heroX + heroW / 2, labelY,
-          '700 ' + rpx.rpx(48).toFixed(0) + 'px sans-serif', '#663f1f',
-          rpx.rpx(8)
-        )
-        ctx.restore()
-      }
+    var label = layout.themeLabel
+    if (next && next.theme && label.gapBottom > label.gapTop) {
+      ctx.save()
+      ctx.shadowColor = 'rgba(0,0,0,0.45)'
+      ctx.shadowBlur = rpx.rpx(8)
+      ctx.shadowOffsetY = rpx.rpx(2)
+      draw.fillTextCenteredSpacing(
+        ctx, next.theme.name, label.centerX, label.y,
+        '700 ' + rpx.rpx(48).toFixed(0) + 'px sans-serif', '#663f1f',
+        rpx.rpx(8)
+      )
+      ctx.restore()
     }
   }
 
-  // 底部三按钮
-  this._drawBottomBar(ctx, W, H)
+  this._drawBottomBar(ctx, layout)
 
   // 排行榜弹窗
   if (this.showRank) {
@@ -160,11 +261,9 @@ HomeScreen.prototype.render = function (ctx) {
 
   // 设置图标始终显示（叠在弹窗遮罩之上）
   var self = this
-  var navY = rpx.safeTop()
-  var navH = rpx.rpx(88)
-  settingsModal.drawNavIcon(ctx, navY, navH)
+  settingsModal.drawNavIcon(ctx, layout.nav.y, layout.nav.h)
   if (!this.showSettings) {
-    this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () {
+    this.addHitZone(settingsModal.navHitRect(layout.nav.y, layout.nav.h, true), function () {
       self.showRank = false
       self._openSettings()
     })
@@ -271,44 +370,23 @@ HomeScreen.prototype._drawPuzzleGrid = function (ctx, x, y, w, h, cols, rows) {
   ctx.restore()
 }
 
-HomeScreen.prototype._drawBottomBar = function (ctx, W, H) {
-  var sideSize = rpx.rpx(SIDE_BTN_SIZE_RPX)
-  var mainW = rpx.rpx(MAIN_BTN_W_RPX)
-  var mainH = rpx.rpx(MAIN_BTN_H_RPX)
-  var paddingX = rpx.rpx(20)
-  var paddingBottom = rpx.safeBottom() + rpx.rpx(BOTTOM_BAR_BOTTOM_PADDING_RPX)
-  var barTop = H - paddingBottom - mainH - rpx.rpx(BOTTOM_BAR_TOP_GAP_RPX)
-
-  var mainCx = W / 2
-  var mainCy = barTop + mainH / 2
-
-  // 左：排行
-  var leftCx = paddingX + sideSize / 2 + rpx.rpx(8)
-  var leftCy = mainCy
-  this._drawCircleIcon(ctx, ICON_RANK, leftCx, leftCy, sideSize)
-  var leftRect = {
-    x: leftCx - sideSize / 2, y: leftCy - sideSize / 2,
-    w: sideSize, h: sideSize
-  }
-  this._sideButtonRects.rank = leftRect
+HomeScreen.prototype._drawBottomBar = function (ctx, layout) {
+  var main = layout.bottomBar.mainBtn
+  var rank = layout.bottomBar.rankBtn
+  var gallery = layout.bottomBar.galleryBtn
   var self = this
-  this.addHitZone(leftRect, function () { self._openRank() })
 
-  // 右：图集
-  var rightCx = W - paddingX - sideSize / 2 - rpx.rpx(8)
-  var rightCy = mainCy
-  this._drawCircleIcon(ctx, ICON_GALLERY, rightCx, rightCy, sideSize)
-  var rightRect = {
-    x: rightCx - sideSize / 2, y: rightCy - sideSize / 2,
-    w: sideSize, h: sideSize
-  }
-  this._sideButtonRects.gallery = rightRect
-  this.addHitZone(rightRect, function () { self._openGallery() })
+  this._drawSideIcon(ctx, ICON_RANK, rank.cx, rank.cy, rank.w, rank.h)
+  this._sideButtonRects.rank = rank
+  this.addHitZone(rank, function () { self._openRank() })
 
-  // 中：关卡 N（下一关）
+  this._drawSideIcon(ctx, ICON_GALLERY, gallery.cx, gallery.cy, gallery.w, gallery.h)
+  this._sideButtonRects.gallery = gallery
+  this.addHitZone(gallery, function () { self._openGallery() })
+
   var icon = assets.get(ICON_LEVEL)
   if (icon) {
-    ctx.drawImage(icon, mainCx - mainW / 2, mainCy - mainH / 2, mainW, mainH)
+    ctx.drawImage(icon, main.x, main.y, main.w, main.h)
   }
   var nextLevelNum = progress.countAllCompleted(galleryData.THEMES) + 1
   ctx.save()
@@ -316,26 +394,20 @@ HomeScreen.prototype._drawBottomBar = function (ctx, W, H) {
   ctx.shadowBlur = rpx.rpx(8)
   ctx.shadowOffsetY = rpx.rpx(2)
   draw.fillTextCentered(
-    ctx, '关卡' + nextLevelNum, mainCx, mainCy,
+    ctx, '关卡' + nextLevelNum, main.cx, main.cy,
     '700 ' + rpx.rpx(56).toFixed(0) + 'px sans-serif', '#ffffff'
   )
   ctx.restore()
-  var mainRect = {
-    x: mainCx - mainW / 2, y: mainCy - mainH / 2,
-    w: mainW, h: mainH
-  }
-  this.addHitZone(mainRect, function () { self._startPuzzle() })
+  this.addHitZone(main, function () { self._startPuzzle() })
 }
 
-HomeScreen.prototype._drawCircleIcon = function (ctx, src, cx, cy, size) {
+HomeScreen.prototype._drawSideIcon = function (ctx, src, cx, cy, w, h) {
   var img = assets.get(src)
   if (img) {
-    ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size)
+    ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h)
   } else {
     ctx.fillStyle = 'rgba(255,255,255,0.18)'
-    ctx.beginPath()
-    ctx.arc(cx, cy, size / 2, 0, Math.PI * 2)
-    ctx.fill()
+    draw.fillRoundedRect(ctx, cx - w / 2, cy - h / 2, w, h, Math.min(w, h) * 0.2, 'rgba(255,255,255,0.18)')
   }
 }
 
@@ -686,4 +758,5 @@ HomeScreen.prototype._startPuzzle = function () {
   }))
 }
 
+HomeScreen.layoutHome = layoutHome
 module.exports = HomeScreen

@@ -5,6 +5,7 @@ var rpx = require('./rpx')
 var assets = require('./assets')
 var draw = require('./draw')
 var settings = require('../utils/settings')
+var bgm = require('./bgm')
 
 var NAV_ICON = 'images/icons/setting.png'
 var NAV_SIZE_RPX = 72
@@ -16,34 +17,40 @@ var SRC_W = 862
 var SRC_H = 1232
 var MODAL_ASPECT = SRC_W / SRC_H
 
+/** 屏幕显示：边距与最大宽度（rpx），改这里调弹框大小 */
+var MODAL_PAD_X_RPX = 72
+var MODAL_PAD_Y_RPX = 56
+var MODAL_MAX_WIDTH_RPX = 540
+
 var USER = {
   name: '吉',
   id: '123456',
   avatarBg: 'images/settings/avatar-bg.png'
 }
 
-var ICON_W = 227
-var ICON_H = 61
+/** 开关显示区（862 设计稿）；资源图为 530×144 @2x */
+var ICON_W = 265
+var ICON_H = 72
 var TOGGLE_X = 480
 
 var ICON_ROWS = [
   {
     key: 'music',
-    offPath: 'images/settings/icon_1.png',
-    onPath: 'images/settings/icon_2.png',
-    x: TOGGLE_X, y: 580, w: ICON_W, h: ICON_H
+    offPath: 'images/settings/icon_2.png',
+    onPath: 'images/settings/icon_1.png',
+    x: TOGGLE_X, y: 575, w: ICON_W, h: ICON_H
   },
   {
     key: 'sfx',
-    offPath: 'images/settings/icon_3.png',
-    onPath: 'images/settings/icon_4.png',
-    x: TOGGLE_X, y: 710, w: ICON_W, h: ICON_H
+    offPath: 'images/settings/icon_4.png',
+    onPath: 'images/settings/icon_3.png',
+    x: TOGGLE_X, y: 705, w: ICON_W, h: ICON_H
   },
   {
     key: 'vibrate',
-    offPath: 'images/settings/icon_5.png',
-    onPath: 'images/settings/icon_6.png',
-    x: TOGGLE_X, y: 840, w: ICON_W, h: ICON_H
+    offPath: 'images/settings/icon_6.png',
+    onPath: 'images/settings/icon_5.png',
+    x: TOGGLE_X, y: 835, w: ICON_W, h: ICON_H
   }
 ]
 
@@ -57,8 +64,8 @@ var USER_LAYOUT = {
 
 var CLOSE_LAYOUT = { x: 773, y: 63, w: 88, h: 88 }
 
-var BTN_W = 260
-var BTN_H = 110
+var BTN_W = 300
+var BTN_H = 135
 var BTN_GAP = 42
 var BTN_Y = 1020
 var BTN_LEFT_X = Math.floor((SRC_W - BTN_W * 2 - BTN_GAP) / 2)
@@ -67,7 +74,7 @@ var BUTTONS = [
   {
     action: 'home',
     path: 'images/settings/btn_restart.png',
-    x: BTN_LEFT_X,
+    x: BTN_LEFT_X - 10,
     y: BTN_Y,
     w: BTN_W,
     h: BTN_H
@@ -75,7 +82,7 @@ var BUTTONS = [
   {
     action: 'restart',
     path: 'images/settings/btn_home.png',
-    x: BTN_LEFT_X + BTN_W + BTN_GAP,
+    x: BTN_LEFT_X + BTN_W + BTN_GAP + 10,
     y: BTN_Y,
     w: BTN_W,
     h: BTN_H
@@ -159,9 +166,9 @@ function isNavHit(navY, navH, x, y) {
 }
 
 function computeModalRect(W, H) {
-  var padX = rpx.rpx(40)
-  var padY = rpx.rpx(48) + rpx.safeTop() * 0.15
-  var maxW = W - padX * 2
+  var padX = rpx.rpx(MODAL_PAD_X_RPX)
+  var padY = rpx.rpx(MODAL_PAD_Y_RPX) + rpx.safeTop() * 0.15
+  var maxW = Math.min(W - padX * 2, rpx.rpx(MODAL_MAX_WIDTH_RPX))
   var maxH = H - padY * 2 - rpx.safeBottom()
   var modalW = maxW
   var modalH = modalW / MODAL_ASPECT
@@ -185,6 +192,16 @@ function drawImage(ctx, slot, path) {
   }
   var drawable = getImageNoBg(path)
   if (drawable) ctx.drawImage(drawable, slot.x, slot.y, slot.w, slot.h)
+}
+
+/** 开关图（530×144 透明 PNG），按显示区缩放，不再抠黑底 */
+function drawToggleIcon(ctx, slot, path) {
+  var img = assets.get(path)
+  if (!img) {
+    assets.load(path)
+    return
+  }
+  ctx.drawImage(img, slot.x, slot.y, slot.w, slot.h)
 }
 
 function drawOverlay(screen, ctx, modal, handlers) {
@@ -237,9 +254,10 @@ function drawOverlay(screen, ctx, modal, handlers) {
 function drawIconRow(screen, ctx, modal, row, onToggle) {
   var slot = mapDesignRect(modal, row.x, row.y, row.w, row.h)
   var path = settings.get(row.key) ? row.onPath : row.offPath
-  drawImage(ctx, slot, path)
+  drawToggleIcon(ctx, slot, path)
   screen.addHitZone(slot, function () {
     settings.toggle(row.key)
+    if (row.key === 'music') bgm.sync()
     if (onToggle) onToggle(row.key)
   })
 }
@@ -305,9 +323,14 @@ function drawModal(screen, ctx, W, H, handlers) {
 }
 
 module.exports = {
+  SRC_W: SRC_W,
+  SRC_H: SRC_H,
+  MODAL_MAX_WIDTH_RPX: MODAL_MAX_WIDTH_RPX,
+  MODAL_PAD_X_RPX: MODAL_PAD_X_RPX,
   preload: preload,
   navHitRect: navHitRect,
   isNavHit: isNavHit,
   drawNavIcon: drawNavIcon,
-  drawModal: drawModal
+  drawModal: drawModal,
+  computeModalRect: computeModalRect
 }

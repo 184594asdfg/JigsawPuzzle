@@ -1,27 +1,28 @@
 /**
  * 拼图页底部工具弹窗（加时 / 提示 / 查看完整图）
- * 设计稿基准：1241 × 1414
+ * 设计稿基准：750 × 855（宽 750px，高按原 1241:1414 比例）
  */
 var rpx = require('./rpx')
 var assets = require('./assets')
 var draw = require('./draw')
 
-var SRC_W = 1241
-var SRC_H = 1414
+var SRC_W = 750
+var SRC_H = 855
 var MODAL_ASPECT = SRC_W / SRC_H
 
 /**
- * 屏幕显示边距（与 settings-modal.js 的 40/48 独立，勿对齐）
- * 工具弹窗设计稿更宽（1241×1414），边距更小、优先占满高度 → 比设置弹窗（862×1232）更大
+ * 屏幕显示边距与上限（与 settings-modal 独立；仍比设置弹窗略大）
  */
-var MODAL_PAD_X_RPX = 12
-var MODAL_PAD_Y_RPX = 24
+var MODAL_PAD_X_RPX = 56
+var MODAL_PAD_Y_RPX = 52
+var MODAL_MAX_WIDTH_RPX = 580
+var MODAL_MAX_HEIGHT_RPX = 680
 
-/** 右上角关闭 X 热区（设计稿坐标，圆形，w 与 h 保持一致） */
-var CLOSE_LAYOUT = { x: 1115, y: 92, w: 120, h: 120 }
+/** 右上角关闭 X 热区（750 设计稿坐标，圆形，w 与 h 保持一致） */
+var CLOSE_LAYOUT = { x: 674, y: 56, w: 73, h: 73 }
 
-/** 底部确认按钮热区（设计稿坐标，可按图微调） */
-var CONFIRM_LAYOUT = { x: 433, y: 1170, w: 374, h: 126 }
+/** 底部确认按钮热区（750 设计稿坐标，可按图微调） */
+var CONFIRM_LAYOUT = { x: 262, y: 707, w: 226, h: 76 }
 
 var MODAL_CONFIG = {
   addTime: {
@@ -52,14 +53,16 @@ function mapDesignRect(modal, dx, dy, dw, dh) {
 function computeModalRect(W, H) {
   var padX = rpx.rpx(MODAL_PAD_X_RPX)
   var padY = rpx.rpx(MODAL_PAD_Y_RPX) + rpx.safeTop() * 0.08
-  var maxW = W - padX * 2
-  var maxH = H - padY * 2 - rpx.safeBottom()
-  // 设置弹窗优先占满宽度（偏瘦高）；工具弹窗优先占满高度（偏宽大）
-  var modalH = maxH
-  var modalW = modalH * MODAL_ASPECT
-  if (modalW > maxW) {
-    modalW = maxW
-    modalH = modalW / MODAL_ASPECT
+  var maxW = Math.min(W - padX * 2, rpx.rpx(MODAL_MAX_WIDTH_RPX))
+  var maxH = Math.min(
+    H - padY * 2 - rpx.safeBottom(),
+    rpx.rpx(MODAL_MAX_HEIGHT_RPX)
+  )
+  var modalW = maxW
+  var modalH = modalW / MODAL_ASPECT
+  if (modalH > maxH) {
+    modalH = maxH
+    modalW = modalH * MODAL_ASPECT
   }
   return {
     x: (W - modalW) / 2,

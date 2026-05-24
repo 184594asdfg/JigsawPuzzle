@@ -15,6 +15,11 @@ var progress = require('../../utils/progress')
 var BG = '#2e76ce'
 var TEXT_HEADER = '#ffffff'
 
+/** 左上角返回图标：显示 72×72 rpx，资源 72×72 @2x */
+var NAV_BACK_ICON = 'images/icons/gallery_back.png'
+var NAV_BACK_LEFT_RPX = 24
+var NAV_BACK_SIZE_RPX = 72
+
 function GalleryScreen() {
   BaseScreen.call(this)
   this.selectedTheme = ''
@@ -36,6 +41,7 @@ GalleryScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
   this._refresh()
   this._preloadLevelImages()
+  assets.load(NAV_BACK_ICON)
 }
 
 GalleryScreen.prototype.onResume = function () {
@@ -145,19 +151,28 @@ GalleryScreen.prototype.render = function (ctx) {
   }
 }
 
+GalleryScreen.prototype._drawNavBack = function (ctx, y, h) {
+  var size = rpx.rpx(NAV_BACK_SIZE_RPX)
+  var cx = rpx.rpx(NAV_BACK_LEFT_RPX) + size / 2
+  var cy = y + h / 2
+  var x = cx - size / 2
+  var iconY = cy - size / 2
+
+  var icon = assets.get(NAV_BACK_ICON)
+  if (!icon) assets.load(NAV_BACK_ICON)
+  if (icon) ctx.drawImage(icon, x, iconY, size, size)
+
+  var pad = rpx.rpx(8)
+  return { x: x - pad, y: iconY - pad, w: size + pad * 2, h: size + pad * 2 }
+}
+
 GalleryScreen.prototype._drawNav = function (ctx, x, y, w, h) {
   ctx.fillStyle = BG
   ctx.fillRect(x, y, w, h)
 
-  // 返回箭头
-  var backCx = rpx.rpx(36)
-  var backCy = y + h / 2
-  draw.drawNavArrow(ctx, backCx, backCy, rpx.rpx(20), TEXT_HEADER, rpx.rpx(4))
   var self = this
-  this.addHitZone(
-    { x: 0, y: y, w: rpx.rpx(80), h: h },
-    function () { self._onBack() }
-  )
+  var backRect = this._drawNavBack(ctx, y, h)
+  this.addHitZone(backRect, function () { self._onBack() })
 
   var title = this.selectedTheme && this.currentTheme ? this.currentTheme.name : '图集'
   var fontSize = this.selectedTheme ? rpx.rpx(32) : rpx.rpx(34)

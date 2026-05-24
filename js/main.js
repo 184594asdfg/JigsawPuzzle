@@ -4,6 +4,8 @@
 var rpx = require('./rpx')
 var assets = require('./assets')
 var screenManager = require('./screen-manager')
+var bgm = require('./bgm')
+var settings = require('../utils/settings')
 
 var canvas = wx.createCanvas()
 var ctx = canvas.getContext('2d')
@@ -49,9 +51,6 @@ var CORE_ASSETS = [
   'images/themes/theme-locked.png',
   'images/themes/level-placeholder.png',
   'images/photo1.jpg',
-  'images/photo2.jpg',
-  'images/photo3.jpg',
-  'images/photo4.jpg',
   'images/merge_fx.png'
 ]
 
@@ -97,6 +96,9 @@ wx.onTouchMove(function (e) { screenManager.onTouchMove(e) })
 wx.onTouchEnd(function (e) { screenManager.onTouchEnd(e) })
 wx.onTouchCancel(function (e) { screenManager.onTouchCancel(e) })
 
+wx.onShow(function () { bgm.sync() })
+wx.onHide(function () { bgm.pause() })
+
 var lastTs = 0
 function loop(ts) {
   var now = ts || Date.now()
@@ -111,6 +113,8 @@ function loop(ts) {
 //  启动
 // ---------------------------------------------------------------------------
 preload().then(function () {
+  settings.init()
+  bgm.start()
   var HomeScreen = require('./screens/home-screen')
   screenManager.push(new HomeScreen())
   requestAnimationFrame(loop)
