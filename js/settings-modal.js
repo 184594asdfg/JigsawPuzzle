@@ -8,6 +8,7 @@ var pressAnim = require('./press-anim')
 var settings = require('../utils/settings')
 var user = require('../utils/user')
 var bgm = require('./bgm')
+var sfx = require('./sfx')
 
 var NAV_ICON = 'images/icons/setting.png'
 var NAV_SIZE_RPX = 72
@@ -282,6 +283,7 @@ function drawIconRow(screen, ctx, modal, row, onToggle, canInteract) {
   drawToggleIcon(ctx, slot, path)
   if (!canInteract) return
   screen.addHitZone(slot, function () {
+    sfx.playClick()
     settings.toggle(row.key)
     if (row.key === 'music') bgm.sync()
     if (onToggle) onToggle(row.key)
@@ -293,6 +295,7 @@ function drawButton(screen, ctx, modal, btn, handlers, canInteract) {
   drawImage(ctx, slot, btn.path)
   if (!canInteract) return
   screen.addHitZone(slot, function () {
+    sfx.playClick()
     if (btn.action === 'restart' && handlers.onRestart) {
       handlers.onRestart()
     } else if (btn.action === 'home' && handlers.onHome) {
@@ -315,7 +318,7 @@ function drawModal(screen, ctx, W, H, handlers) {
   ctx.fillRect(0, 0, W, H)
 
   if (canInteract) {
-    screen.addHitZone({ x: 0, y: 0, w: W, h: H }, onClose)
+    screen.addHitZone({ x: 0, y: 0, w: W, h: H }, sfx.wrapClick(onClose))
   }
 
   var rect = computeModalRect(W, H)
@@ -360,7 +363,7 @@ function drawModal(screen, ctx, W, H, handlers) {
         '400 ' + rpx.rpx(44).toFixed(0) + 'px sans-serif', '#ffffff'
       )
     }
-    screen.addHitZone(closeRect, onClose)
+    screen.addHitZone(closeRect, sfx.wrapClick(onClose))
   }
 }
 

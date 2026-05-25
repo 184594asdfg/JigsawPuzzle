@@ -11,6 +11,8 @@ var assets = require('../assets')
 var draw = require('../draw')
 var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
+var prefetch = require('../../utils/prefetch')
+var sfx = require('../sfx')
 var pressAnim = require('../press-anim')
 
 var BG = '#2e76ce'
@@ -56,6 +58,7 @@ GalleryScreen.prototype.onEnter = function (manager) {
     self.dataLoading = false
     self._refresh()
   })
+  prefetch.prefetchNextLevelAssets()
 }
 
 GalleryScreen.prototype.onResume = function () {
@@ -64,8 +67,10 @@ GalleryScreen.prototype.onResume = function () {
     return progress.loadFromServer()
   }).then(function () {
     self._refresh()
+    prefetch.prefetchNextLevelAssets()
   }).catch(function () {
     self._refresh()
+    prefetch.prefetchNextLevelAssets()
   })
 }
 
@@ -89,6 +94,7 @@ GalleryScreen.prototype._refresh = function () {
   if (this.selectedTheme) {
     this.currentTheme = this._buildCurrentTheme(this.selectedTheme)
   }
+  prefetch.prefetchNextLevelAssets()
   this.scrollY = 0
 }
 
@@ -113,10 +119,7 @@ GalleryScreen.prototype._buildCurrentTheme = function (themeId) {
     }
     var key = l ? l.key : galleryData.buildLevelKey(t.id, n)
     var done = progress.isLevelComplete(key)
-    var image = ''
-    if (done) {
-      image = (l && l.image) ? l.image : galleryData.buildLevelImageUrl(t.imageFolder, n)
-    }
+    var image = done ? galleryData.resolveLevelImage(t, n, l) : ''
     levels.push({
       key: key,
       themeId: t.id,
@@ -487,6 +490,7 @@ GalleryScreen.prototype.onTouchCancel = function () {
 
 GalleryScreen.prototype._startPressAnim = function (id) {
   if (this._pressAnim || this.showFullscreen) return
+  sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
 }
 
@@ -514,6 +518,7 @@ GalleryScreen.prototype._onTapTheme = function (item) {
   this.selectedTheme = item.id
   this.currentTheme = this._buildCurrentTheme(item.id)
   this.scrollY = 0
+  prefetch.prefetchNextLevelAssets()
 }
 
 GalleryScreen.prototype._onTapLevel = function (level) {
@@ -544,16 +549,7 @@ GalleryScreen.prototype._onTapLevel = function (level) {
     }
     self.pulseKey = resolved.key
     self._pulseTime = 0
-    setTimeout(function () {
-      var PuzzleScreen = require('./puzzle-screen')
-      self.manager.push(new PuzzleScreen({
-        image: resolved.image,
-        grid: resolved.grid,
-        timeLimit: resolved.timeLimit,
-        levelKey: resolved.key,
-        levelLabel: resolved.name
-      }))
-    }, 320)
+    prefetch.enterPuzzleWhenReady(self.manager, resolved, 320)
   }
 
   if (level.done) {
@@ -568,6 +564,7 @@ GalleryScreen.prototype._onTapLevel = function (level) {
 }
 
 GalleryScreen.prototype._closeFullscreen = function () {
+  sfx.playClick()
   this.showFullscreen = false
   this.fullscreenImage = ''
 }

@@ -12,11 +12,16 @@ var layoutMod = require('./layout')
 var assets = require('../assets')
 var draw = require('../draw')
 var settings = require('../../utils/settings')
+var sfx = require('../sfx')
 
 var SRC_IMAGE_W = 750
 var SRC_IMAGE_H = 1125
 var ANIM_DUR = 220
 var MERGE_FX_DUR = 1100
+/** 开局：拼图区右下角叠成一摞 → 顶牌飞出 → 每块绕自身水平中线翻面 */
+var INTRO_STAGGER_MS = 42
+var INTRO_FLY_DUR = 280
+var INTRO_FLIP_DUR = 480
 
 var SOUND_MOVE = 'audio/move.mp3'
 var SOUND_SWAP = 'audio/swap.mp3'
@@ -59,8 +64,12 @@ function PuzzleEngine(opts) {
   this._anims = {}        // pieceId -> {fromTx, fromTy, t0, dur}
   this._groupAnims = {}   // groupId -> {fromTx, fromTy, t0, dur}
   this._mergeFx = null    // {x,y,w,h,t0}
+  this._intro = null      // { phase, stackX, stackY, ... }
+  this._introPending = false
+  this._inputLocked = false
   this.onWin = opts.onWin || function () {}
   this.onAnyMove = opts.onAnyMove || function () {}
+  this.onIntroComplete = opts.onIntroComplete || function () {}
   this.sfxEnabled = settings.get('sfx')
   this._initAudio()
   this._applyLayout()
@@ -100,6 +109,14 @@ PuzzleEngine.prototype.boardSize = function () {
 PuzzleEngine.prototype.setBoardPosition = function (x, y) {
   this.boardX = x
   this.boardY = y
+}
+
+PuzzleEngine.prototype.isInputLocked = function () {
+  return !!this._inputLocked
+}
+
+PuzzleEngine.prototype.isIntroPlaying = function () {
+  return !!this._intro
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +163,125 @@ PuzzleEngine.prototype._initPieces = function () {
   this._anims = {}
   this._groupAnims = {}
   this._mergeFx = null
+  this._intro = null
   this.groups = this._buildGroups()
+  this._introPending = true
+}
+
+/** 拼图网格右下角那一格的左上角（棋盘内坐标） */
+PuzzleEngine.prototype._introStackXY = function () {
+  var L = this.layout
+  var N = this.gridSize
+  var br = layoutMod.slotToXY(L, N - 1, N - 1)
+  return { x: br.x, y: br.y }
+}
+
+/**
+ * 叠放层级：棋盘从下往上、每行从右往左依次往上盖。
+ * 层 0 = 最下一排最右（牌堆底），层最大 = 最上一排最左（牌堆顶）。
+ */
+PuzzleEngine.prototype._introStackLayerFromSlot = function (slotIndex) {
+  var N = this.gridSize
+  var row = Math.floor(slotIndex / N)
+  var col = slotIndex % N
+  return (N - 1 - row) * N + (N - 1 - col)
+}
+
+/**
+ * 在棋盘坐标已就绪后启动开局（由 render 触发）。
+ * 牌堆锚在网格最后一格，与右下角拼图块位置重合。
+ */
+PuzzleEngine.prototype._startIntroAnim = function () {
+  var L = this.layout
+  var N = this.gridSize
+  var total = N * N
+  var stack = this._introStackXY()
+  var stackBaseX = stack.x
+  var stackBaseY = stack.y
+  var list = []
+  for (var gi = 0; gi < this.groups.length; gi++) {
+    var g = this.groups[gi]
+    for (var pi = 0; pi < g.pieces.length; pi++) {
+      var piece = g.pieces[pi]
+      list.push({
+        piece: piece,
+        group: g,
+        layer: this._introStackLayerFromSlot(piece.currentIndex)
+      })
+    }
+  }
+  list.sort(function (a, b) { return a.layer - b.layer })
+  var now = Date.now()
+  var stackLayerMap = {}
+  for (var si = 0; si < list.length; si++) {
+    stackLayerMap[list[si].piece.id] = list[si].layer
+  }
+  this._inputLocked = true
+  this._intro = {
+    phase: 'deal',
+    showBack: true,
+    stackX: stackBaseX,
+    stackY: stackBaseY,
+    dealEndTime: now + (total - 1) * INTRO_STAGGER_MS + INTRO_FLY_DUR,
+    stackLayer: stackLayerMap
+  }
+  sfx.playIntroDeal()
+  for (var order = 0; order < list.length; order++) {
+    var item = list[list.length - 1 - order]
+    var piece = item.piece
+    var group = item.group
+    var homeX = group.x + piece.localX
+    var homeY = group.y + piece.localY
+    // 全部叠在同一位置，层数大的后画、盖在上面
+    var sx = stackBaseX
+    var sy = stackBaseY
+    var fromTx = sx - homeX
+    var fromTy = sy - homeY
+    this._anims[piece.id] = {
+      fromTx: fromTx,
+      fromTy: fromTy,
+      t0: now + order * INTRO_STAGGER_MS,
+      dur: INTRO_FLY_DUR,
+      curTx: fromTx,
+      curTy: fromTy
+    }
+    piece.tx = 0
+    piece.ty = 0
+  }
+}
+
+PuzzleEngine.prototype._groupIntroStackLayer = function (group) {
+  if (!this._intro || !this._intro.stackLayer) return 0
+  var max = 0
+  for (var i = 0; i < group.pieces.length; i++) {
+    var layer = this._intro.stackLayer[group.pieces[i].id] || 0
+    if (layer > max) max = layer
+  }
+  return max
+}
+
+PuzzleEngine.prototype._introFlipState = function () {
+  if (!this._intro || this._intro.phase !== 'flip') return null
+  var t = Math.min(1, (Date.now() - this._intro.flipT0) / INTRO_FLIP_DUR)
+  var showBack = t < 0.5
+  var half = showBack ? t * 2 : (t - 0.5) * 2
+  // 两段翻面：背面 1→窄边，正面窄边→1，避免 scaleX=0 整块消失
+  var scaleX = showBack
+    ? Math.cos(half * Math.PI / 2)
+    : Math.sin(half * Math.PI / 2)
+  if (scaleX < 0.04) scaleX = 0.04
+  return {
+    showBack: showBack,
+    scaleX: scaleX
+  }
+}
+
+PuzzleEngine.prototype._beginIntroFlip = function () {
+  if (!this._intro) return
+  this._intro.phase = 'flip'
+  this._intro.flipT0 = Date.now()
+  this._intro.showBack = true
+  sfx.playIntroFlip()
 }
 
 // ---------------------------------------------------------------------------
@@ -372,6 +507,11 @@ PuzzleEngine.prototype.update = function (/* dt */) {
     var a = this._anims[pid]
     var t = (now - a.t0) / a.dur
     if (t >= 1) { delete this._anims[pid]; continue }
+    if (t < 0) {
+      a.curTx = a.fromTx
+      a.curTy = a.fromTy
+      continue
+    }
     var k = 1 - easeOutCubic(t)
     a.curTx = a.fromTx * k
     a.curTy = a.fromTy * k
@@ -391,16 +531,36 @@ PuzzleEngine.prototype.update = function (/* dt */) {
     if (tm >= 1) this._mergeFx = null
     else this._mergeFx.t = tm
   }
+
+  if (this._intro) {
+    if (this._intro.phase === 'deal') {
+      if (now >= this._intro.dealEndTime && Object.keys(this._anims).length === 0) {
+        this._beginIntroFlip()
+      }
+    } else if (this._intro.phase === 'flip') {
+      if (now - this._intro.flipT0 >= INTRO_FLIP_DUR) {
+        this._intro = null
+        this._inputLocked = false
+        this.onIntroComplete()
+      }
+    }
+  }
 }
 
 PuzzleEngine.prototype._pieceTx = function (p) {
   var a = this._anims[p.id]
-  if (a) return a.curTx || 0
+  if (a) {
+    if (a.curTx != null) return a.curTx
+    return a.fromTx || 0
+  }
   return p.tx || 0
 }
 PuzzleEngine.prototype._pieceTy = function (p) {
   var a = this._anims[p.id]
-  if (a) return a.curTy || 0
+  if (a) {
+    if (a.curTy != null) return a.curTy
+    return a.fromTy || 0
+  }
   return p.ty || 0
 }
 PuzzleEngine.prototype._groupTx = function (g) {
@@ -421,12 +581,17 @@ PuzzleEngine.prototype._groupTy = function (g) {
 // ---------------------------------------------------------------------------
 
 PuzzleEngine.prototype.render = function (ctx) {
+  if (this._introPending) {
+    this._introPending = false
+    this._startIntroAnim()
+  }
+
   var bx = this.boardX
   var by = this.boardY
   var L = this.layout
-  // 棋盘外不画底色，由场景背景负责。
+  var flipSt = (this._intro && this._intro.phase === 'flip') ? this._introFlipState() : null
 
-  // 拼图块绘制顺序：普通组 → 组合块 → 拖拽中。
+  // 拼图块绘制顺序：普通组 → 组合块 → 拖拽中；开局顶牌后画
   var normal = []
   var compound = []
   var dragging = null
@@ -436,9 +601,22 @@ PuzzleEngine.prototype.render = function (ctx) {
     else if (g.isCompound) compound.push(g)
     else normal.push(g)
   }
-  for (var n = 0; n < normal.length; n++) this._renderGroup(ctx, normal[n], bx, by, L)
-  for (var c = 0; c < compound.length; c++) this._renderGroup(ctx, compound[c], bx, by, L)
-  if (dragging) this._renderGroup(ctx, dragging, bx, by, L, true)
+  if (this._intro) {
+    var self = this
+    var sortByStackLayer = function (ga, gb) {
+      return self._groupIntroStackLayer(gb) - self._groupIntroStackLayer(ga)
+    }
+    normal.sort(sortByStackLayer)
+    compound.sort(sortByStackLayer)
+  }
+  var showBack = flipSt ? flipSt.showBack : (this._intro && this._intro.showBack)
+  for (var n = 0; n < normal.length; n++) {
+    this._renderGroup(ctx, normal[n], bx, by, L, false, showBack, flipSt)
+  }
+  for (var c = 0; c < compound.length; c++) {
+    this._renderGroup(ctx, compound[c], bx, by, L, false, showBack, flipSt)
+  }
+  if (dragging) this._renderGroup(ctx, dragging, bx, by, L, true, false, null)
 
   // 合并特效
   if (this._mergeFx) {
@@ -446,7 +624,7 @@ PuzzleEngine.prototype.render = function (ctx) {
   }
 }
 
-PuzzleEngine.prototype._renderGroup = function (ctx, group, bx, by, L, withShadow) {
+PuzzleEngine.prototype._renderGroup = function (ctx, group, bx, by, L, withShadow, showBack, flipSt) {
   var gtx = this._groupTx(group)
   var gty = this._groupTy(group)
   for (var i = 0; i < group.pieces.length; i++) {
@@ -455,13 +633,21 @@ PuzzleEngine.prototype._renderGroup = function (ctx, group, bx, by, L, withShado
     var py = this._pieceTy(p)
     var pieceX = bx + group.x + gtx + p.localX + px
     var pieceY = by + group.y + gty + p.localY + py
-    this._renderPiece(ctx, p, pieceX, pieceY, L, withShadow)
+    this._renderPiece(ctx, p, pieceX, pieceY, L, withShadow, showBack, flipSt)
   }
 }
 
-PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow) {
+PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow, showBack, flipSt) {
   var cellW = L.cellW
   var cellH = L.cellH
+  if (flipSt) {
+    ctx.save()
+    var pcx = x + cellW / 2
+    var pcy = y + cellH / 2
+    ctx.translate(pcx, pcy)
+    ctx.scale(flipSt.scaleX, 1)
+    ctx.translate(-pcx, -pcy)
+  }
   var inset = L.BORDER + L.PIECE_PADDING
   var att = piece.att
   var R = L.PIECE_RADIUS
@@ -516,9 +702,26 @@ PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow)
   draw.roundedRectPathCorners(ctx, imgX, imgY, imgW, imgH, itl, itr, ibr, ibl)
   ctx.clip()
 
-  // 整图按 (cellW*N)×(cellH*N) 视口绘制；imgX 是 piece 的图片裁剪窗口左上角，
-  // piece.offsetX 已包含「相对 imgX 的图片左上角偏移」（含 inset），直接相加即可。
-  if (this.image) {
+  // 整图按 (cellW*N)×(cellH*N) 视口绘制；开局背面不显示图案
+  if (showBack) {
+    ctx.fillStyle = '#dfe6e4'
+    ctx.fillRect(imgX, imgY, imgW, imgH)
+    ctx.strokeStyle = 'rgba(0,0,0,0.06)'
+    ctx.lineWidth = 1
+    var step = Math.max(8, Math.floor(Math.min(imgW, imgH) / 6))
+    for (var lx = imgX; lx < imgX + imgW; lx += step) {
+      ctx.beginPath()
+      ctx.moveTo(lx, imgY)
+      ctx.lineTo(lx, imgY + imgH)
+      ctx.stroke()
+    }
+    for (var ly = imgY; ly < imgY + imgH; ly += step) {
+      ctx.beginPath()
+      ctx.moveTo(imgX, ly)
+      ctx.lineTo(imgX + imgW, ly)
+      ctx.stroke()
+    }
+  } else if (this.image) {
     var fullW = this.layout.imgW
     var fullH = this.layout.imgH
     var drawX = imgX + piece.offsetX
@@ -547,6 +750,7 @@ PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow)
     if (!att.right) { ctx.moveTo(x + cellW - 0.5, y); ctx.lineTo(x + cellW - 0.5, y + cellH) }
     ctx.stroke()
   }
+  if (flipSt) ctx.restore()
 }
 
 PuzzleEngine.prototype._renderMergeFx = function (ctx, bx, by) {
@@ -597,7 +801,7 @@ PuzzleEngine.prototype._hitTest = function (sx, sy) {
 }
 
 PuzzleEngine.prototype.onTouchStart = function (sx, sy) {
-  if (this.solved) return false
+  if (this.solved || this._inputLocked) return false
   // 进行中的动画期间允许抓取（用户体验考虑：抓住后清零原 anim）
   var hit = this._hitTest(sx, sy)
   if (!hit) return false

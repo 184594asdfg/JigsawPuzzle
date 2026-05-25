@@ -6,6 +6,7 @@ var rpx = require('./rpx')
 var assets = require('./assets')
 var draw = require('./draw')
 var pressAnim = require('./press-anim')
+var sfx = require('./sfx')
 
 var SRC_W = 750
 var SRC_H = 855
@@ -117,7 +118,7 @@ function drawModal(screen, ctx, W, H, type, handlers) {
   ctx.fillRect(0, 0, W, H)
 
   if (canInteract) {
-    screen.addHitZone({ x: 0, y: 0, w: W, h: H }, onClose)
+    screen.addHitZone({ x: 0, y: 0, w: W, h: H }, sfx.wrapClick(onClose))
   }
 
   var rect = computeModalRect(W, H)
@@ -144,12 +145,12 @@ function drawModal(screen, ctx, W, H, type, handlers) {
 
   if (canInteract) {
     var closeRect = mapDesignRect(rect, CLOSE_LAYOUT.x, CLOSE_LAYOUT.y, CLOSE_LAYOUT.w, CLOSE_LAYOUT.h)
-    screen.addHitZone(closeRect, onClose)
+    screen.addHitZone(closeRect, sfx.wrapClick(onClose))
 
     if (cfg.confirm) {
       var confirmRect = mapDesignRect(rect, CONFIRM_LAYOUT.x, CONFIRM_LAYOUT.y,
         CONFIRM_LAYOUT.w, CONFIRM_LAYOUT.h)
-      screen.addHitZone(confirmRect, onConfirm)
+      screen.addHitZone(confirmRect, sfx.wrapClick(onConfirm))
     }
   }
 }

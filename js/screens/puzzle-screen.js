@@ -12,6 +12,7 @@ var settings = require('../../utils/settings')
 var settingsModal = require('../settings-modal')
 var toolModal = require('../puzzle-tool-modal')
 var pressAnim = require('../press-anim')
+var sfx = require('../sfx')
 
 /** 倒计时区域（rpx）：只设宽度，水平居中，无左右边距 */
 var COUNTDOWN_WIDTH_RPX = 170
@@ -25,6 +26,8 @@ var COUNTDOWN_ALARM_LEFT_RPX = 0
 /** 时间文字相对条中心的水平偏移（正数向右） */
 var COUNTDOWN_TIME_OFFSET_X_RPX = 20
 var COUNTDOWN_ADD_MS = 60 * 1000
+/** 拼图页纯色背景（与原先渐变主色一致） */
+var PUZZLE_BG = '#d0b7eb'
 
 /** 底部三个工具图标：显示 124×138 rpx，资源 248×276 @2x */
 var BOTTOM_TOOL_W_RPX = 124
@@ -118,8 +121,21 @@ PuzzleScreen.prototype._initEngine = function () {
     },
     onAnyMove: function () {}
   })
+  var W = rpx.windowWidth()
+  var navY = rpx.safeTop()
+  var navH = rpx.rpx(88)
+  var countdownH = rpx.rpx(COUNTDOWN_AREA_H_RPX)
+  var countdownY = navY + navH + rpx.rpx(8)
+  var board = this.engine.boardSize()
+  this.engine.setBoardPosition(
+    Math.floor((W - board.w) / 2),
+    countdownY + countdownH + rpx.rpx(COUNTDOWN_GAP_RPX)
+  )
   var src = this.imageSrc
   if (assets.hasFailed(src)) assets.clearFailed(src)
+  if (assets.get(src)) {
+    this.loading = false
+  }
   this.engine.start().then(function () {
     self.loading = false
     if (self.engine) self.engine.setSfxEnabled(settings.get('sfx'))
@@ -140,7 +156,8 @@ PuzzleScreen.prototype.update = function (dt) {
   if (this.showSettings) settingsModal.tickSettingsEnter(this, dt)
   if (this.toolModal) toolModal.tickToolEnter(this, dt)
   if (
-    this.engine && !this.loading && !this.showSuccess && !this.showSettings &&
+    this.engine && !this.loading && !this.engine.isInputLocked() &&
+    !this.showSuccess && !this.showSettings &&
     !this.toolModal && !this.countdownEnded && this.countdownMs > 0
   ) {
     this.countdownMs -= dt
@@ -162,12 +179,7 @@ PuzzleScreen.prototype.render = function (ctx) {
   var H = rpx.windowHeight()
   this.resetHitZones()
 
-  // 渐变背景
-  var grad = ctx.createLinearGradient(0, 0, W * 0.6, H)
-  grad.addColorStop(0, '#5b6fd8')
-  grad.addColorStop(0.45, '#6d5b9e')
-  grad.addColorStop(1, '#764ba2')
-  ctx.fillStyle = grad
+  ctx.fillStyle = PUZZLE_BG
   ctx.fillRect(0, 0, W, H)
 
   // 导航
@@ -226,7 +238,7 @@ PuzzleScreen.prototype.render = function (ctx) {
   // 设置图标（按压动效结束后再弹窗）
   var anim = this._pressAnim
   settingsModal.drawNavIcon(ctx, navY, navH, pressAnim.btnScale(anim, 'settings'))
-  if (!this.showSettings && !anim) {
+  if (!this.showSettings && !anim && !(this.engine && this.engine.isInputLocked())) {
     this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () {
       self._startPressAnim('settings')
     })
@@ -247,8 +259,7 @@ PuzzleScreen.prototype._drawCountdown = function (ctx, W, y, h) {
   var radius = h / 2
   var ratio = this.countdownTotalMs > 0 ? this.countdownMs / this.countdownTotalMs : 0
 
-  draw.fillRoundedRect(ctx, x, y, w, h, radius, 'rgba(255,255,255,0.2)')
-  draw.strokeRoundedRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, radius, 'rgba(255,255,255,0.35)', 1)
+  draw.fillRoundedRect(ctx, x, y, w, h, radius, 'rgba(0,0,0,0.2)')
 
   var timeFont = '600 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif'
   var timeColor = this.countdownEnded ? '#ffb4b4' : (ratio < 0.2 ? '#ffe0a8' : '#ffffff')
@@ -276,7 +287,8 @@ PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
   var y = H - rpx.safeBottom() - rpx.rpx(BOTTOM_TOOL_BOTTOM_RPX) - toolH
   var self = this
   var anim = this._pressAnim
-  var blockHits = !!anim || this.showSuccess || this.showSettings || this.toolModal
+  var blockHits = !!anim || this.showSuccess || this.showSettings || this.toolModal ||
+    (this.engine && this.engine.isInputLocked())
 
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
     var tool = BOTTOM_TOOLS[i]
@@ -303,6 +315,7 @@ PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
 
 PuzzleScreen.prototype._onBottomTool = function (action) {
   if (this.showSuccess || this.showSettings || this.toolModal) return
+  if (this.engine && this.engine.isInputLocked()) return
   if (action === 'addTime' || action === 'hint' || action === 'preview') {
     this.toolModal = action
     toolModal.beginToolEnter(this)
@@ -379,6 +392,7 @@ PuzzleScreen.prototype._goHome = function () {
 
 PuzzleScreen.prototype._openSettings = function () {
   if (this.showSuccess) return
+  if (this.engine && this.engine.isInputLocked()) return
   this.showSettings = true
   settingsModal.beginSettingsEnter(this)
 }
@@ -387,6 +401,8 @@ PuzzleScreen.prototype._startPressAnim = function (id) {
   if (this._pressAnim) return
   if (this.loading || !this.engine || this.loadError) return
   if (this.showSuccess || this.showSettings || this.toolModal) return
+  if (this.engine && this.engine.isInputLocked()) return
+  sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
 }
 
@@ -426,7 +442,10 @@ PuzzleScreen.prototype._drawSuccess = function (ctx, W, H) {
   this._drawPrimaryButton(ctx, btnX, btnY, btnW, btnH, '再玩一次')
   this._successBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH }
   var self = this
-  this.addHitZone(this._successBtnRect, function () { self._initEngine() })
+  this.addHitZone(this._successBtnRect, function () {
+    sfx.playClick()
+    self._initEngine()
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -434,7 +453,8 @@ PuzzleScreen.prototype._drawSuccess = function (ctx, W, H) {
 // ---------------------------------------------------------------------------
 
 PuzzleScreen.prototype._isOnEngine = function (x, y) {
-  if (!this.engine || this.loading || this.showSuccess || this.showSettings || this.toolModal) return false
+  if (!this.engine || this.loading || this.engine.isInputLocked() ||
+    this.showSuccess || this.showSettings || this.toolModal) return false
   var board = this.engine.boardSize()
   var bx = this.engine.boardX
   var by = this.engine.boardY

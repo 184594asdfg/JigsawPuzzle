@@ -165,6 +165,30 @@ function findFirstPlayableLevel(themes) {
   return next
 }
 
+/** 当前可玩关卡的下一关（同主题下一编号，否则下一主题第 1 关） */
+function getLevelAfterCurrent(themes) {
+  if (!themes || !themes.length) return null
+  var current = getNextLevel(themes)
+  if (!current || !current.theme || !current.level) return null
+  var theme = current.theme
+  var levelNum = current.level.level
+  var total = getThemeLevelTotal(theme)
+  if (levelNum < total) {
+    return { theme: theme, level: resolveLevel(theme, levelNum + 1) }
+  }
+  for (var i = 0; i < themes.length; i++) {
+    if (themes[i].id !== theme.id) continue
+    if (i + 1 < themes.length) {
+      var nextTheme = themes[i + 1]
+      var nextTotal = getThemeLevelTotal(nextTheme)
+      if (!nextTotal) return null
+      return { theme: nextTheme, level: resolveLevel(nextTheme, 1) }
+    }
+    break
+  }
+  return null
+}
+
 module.exports = {
   loadFromServer: loadFromServer,
   markLevelComplete: markLevelComplete,
@@ -172,5 +196,6 @@ module.exports = {
   countThemeCompleted: countThemeCompleted,
   countAllCompleted: countAllCompleted,
   getNextLevel: getNextLevel,
-  findFirstPlayableLevel: findFirstPlayableLevel
+  findFirstPlayableLevel: findFirstPlayableLevel,
+  getLevelAfterCurrent: getLevelAfterCurrent
 }

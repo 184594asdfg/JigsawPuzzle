@@ -10,10 +10,14 @@ var rankData = require('../../utils/rank-data')
 var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
 var prefetch = require('../../utils/prefetch')
+var sfx = require('../sfx')
 var pressAnim = require('../press-anim')
+var jigsawShape = require('../jigsaw-shape')
 
 var HOME_BG = 'images/home-bg.jpg'
 var HOME_HERO = 'images/home-hero.png'
+/** 5×5 拼图底图资源（设计稿 750×1000）；运行时按拼图轮廓绘交替色 + 矢量分割线 */
+var HOME_HERO_GRID_BG = 'images/home-hero-grid-bg.png'
 var ICON_RANK = 'images/icons/rank.png'
 var ICON_LEVEL = 'images/icons/level.png'
 var ICON_GALLERY = 'images/icons/gallery.png'
@@ -47,6 +51,10 @@ var NAV_BAR_H_RPX = 88
 var TOP_AREA_W_RPX = 750
 var TOP_AREA_H_RPX = 1000
 var TOP_AREA_ASPECT = TOP_AREA_W_RPX / TOP_AREA_H_RPX
+/** hero 内 5×5 预览格：已通过关卡数 = 显示封面碎片的块数 */
+var HERO_GRID_COLS = 5
+var HERO_GRID_ROWS = 5
+var HERO_GRID_CELLS = HERO_GRID_COLS * HERO_GRID_ROWS
 var TOP_AREA_INSET_RPX = 32
 
 function getBottomBarMetrics(H) {
@@ -182,7 +190,7 @@ HomeScreen.prototype.constructor = HomeScreen
 HomeScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
   settingsModal.preload()
-  prefetch.prefetchNextLevelAssets()
+  prefetch.prefetchHomeAssets()
 }
 
 HomeScreen.prototype.onResume = function () {
@@ -190,7 +198,7 @@ HomeScreen.prototype.onResume = function () {
   this.showSettings = false
   var self = this
   progress.loadFromServer().then(function () {
-    prefetch.prefetchNextLevelAssets()
+    prefetch.prefetchHomeAssets()
   })
 }
 
@@ -295,42 +303,80 @@ HomeScreen.prototype.render = function (ctx) {
   }
 }
 
+/** 棋盘格底色：每格按拼图轮廓填充 #ba6f3f / #cf8653 */
+HomeScreen.prototype._fillHeroGridCells = function (ctx, x, y, w, h, cols, rows) {
+  var cellW = w / cols
+  var cellH = h / rows
+  var N = cols
+  var colors = ['#ba6f3f', '#cf8653']
+  var r, c, px, py
+  for (r = 0; r < rows; r++) {
+    for (c = 0; c < cols; c++) {
+      px = x + c * cellW
+      py = y + r * cellH
+      ctx.save()
+      jigsawShape.piecePath(ctx, px, py, cellW, cellH, c, r, N, null)
+      ctx.fillStyle = colors[(r + c) % 2]
+      ctx.fill()
+      ctx.restore()
+    }
+  }
+}
+
+/** 将封面按 5×5 拼图轮廓切片（半圆凸/凹），前 sliceCount 格绘制对应区域 */
+HomeScreen.prototype._drawHeroCoverSlices = function (ctx, img, x, y, w, h, cols, rows, sliceCount) {
+  if (!img || sliceCount <= 0) return
+  var cellW = w / cols
+  var cellH = h / rows
+  var N = cols
+  var i, c, r, px, py
+  for (i = 0; i < sliceCount; i++) {
+    c = i % cols
+    r = Math.floor(i / cols)
+    px = x + c * cellW
+    py = y + r * cellH
+    ctx.save()
+    jigsawShape.piecePath(ctx, px, py, cellW, cellH, c, r, N, null)
+    ctx.clip()
+    draw.drawImageCover(ctx, img, x, y, w, h)
+    ctx.restore()
+  }
+}
+
 /**
- * hero 上方 3:4 区域（设计稿 750×1000）：
- *   - 当前主题 cover 图 cover 填满
- *   - 上叠 5×5 拼图分块网格线（白色细描边）
- *   - 区域下方居中显示主题名
+ * hero 预览：25 格底色 + 已通关 X 关则显示 X 块封面切片。
  */
 HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
   var next = progress.getNextLevel(galleryData.getThemes())
   var theme = next && next.theme ? next.theme : null
+  var cols = HERO_GRID_COLS
+  var rows = HERO_GRID_ROWS
+  var revealed = theme ? progress.countThemeCompleted(theme) : 0
+  if (revealed > HERO_GRID_CELLS) revealed = HERO_GRID_CELLS
 
   ctx.save()
-  // 圆角裁剪 + 占位底色（图未加载时显示）
   draw.roundedRectPath(ctx, x, y, w, h, rpx.rpx(24))
   ctx.clip()
-  ctx.fillStyle = 'rgba(255,255,255,0.06)'
-  ctx.fillRect(x, y, w, h)
+  assets.tryLoad(HOME_HERO_GRID_BG)
+  this._fillHeroGridCells(ctx, x, y, w, h, cols, rows)
 
-  // 主题封面：CDN + imageFolder + cover.jpg
-  var coverUrl = theme && theme.imageFolder
-    ? galleryData.buildThemeCoverUrl(theme.imageFolder)
-    : (theme && theme.themeImage ? theme.themeImage : '')
-  var themeImg = null
-  if (coverUrl) {
-    themeImg = assets.get(coverUrl)
-    if (!themeImg) assets.tryLoad(coverUrl)
+  var coverUrl = prefetch.getCurrentThemeCoverUrl()
+  if (!coverUrl && theme) {
+    coverUrl = theme.imageFolder
+      ? galleryData.buildThemeCoverUrl(theme.imageFolder)
+      : (theme.themeImage || '')
   }
+  var themeImg = coverUrl ? assets.get(coverUrl) : null
+  if (!themeImg && coverUrl) assets.tryLoad(coverUrl)
+
   if (themeImg) {
-    draw.drawImageCover(ctx, themeImg, x, y, w, h)
-  } else if (theme) {
-    // fallback：用主题卡片图
+    this._drawHeroCoverSlices(ctx, themeImg, x, y, w, h, cols, rows, revealed)
+  } else if (theme && !coverUrl) {
     var fallback = assets.get(galleryData.THEME_CARD_UNLOCKED)
     if (fallback) draw.drawImageCover(ctx, fallback, x, y, w, h)
   }
 
-  // 5×5 拼图分块网格
-  this._drawPuzzleGrid(ctx, x, y, w, h, 5, 5)
+  this._drawPuzzleGrid(ctx, x, y, w, h, cols, rows)
   ctx.restore()
 
   // 外圈细描边
@@ -347,8 +393,8 @@ HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
 HomeScreen.prototype._drawPuzzleGrid = function (ctx, x, y, w, h, cols, rows) {
   var cellW = w / cols
   var cellH = h / rows
-  var knobR = Math.min(cellW, cellH) * 0.16  // 凸起半径占格子的比例
-  var lineW = Math.max(1, rpx.rpx(2))
+  var knobR = Math.min(cellW, cellH) * 0.18
+  var lineW = Math.max(2, rpx.rpx(2.5))
 
   function dir(r, c, type) {
     // 稳定伪随机，相同 (r,c,type) 总返回相同值
@@ -357,7 +403,8 @@ HomeScreen.prototype._drawPuzzleGrid = function (ctx, x, y, w, h, cols, rows) {
   }
 
   ctx.save()
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+  ctx.strokeStyle = '#ffffff'
+  ctx.globalAlpha = 0.95
   ctx.lineWidth = lineW
   ctx.lineJoin = 'round'
 
@@ -395,6 +442,7 @@ HomeScreen.prototype._drawPuzzleGrid = function (ctx, x, y, w, h, cols, rows) {
     ctx.stroke()
   }
 
+  ctx.globalAlpha = 1
   ctx.restore()
 }
 
@@ -767,6 +815,7 @@ HomeScreen.prototype._startPressAnim = function (id) {
   if (this._pressAnim) return
   if (id === 'settings' && this.showSettings) return
   if (id !== 'settings' && (this.showRank || this.showSettings)) return
+  sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
 }
 
@@ -775,6 +824,7 @@ HomeScreen.prototype._openRank = function () {
   this.rankScrollY = 0
 }
 HomeScreen.prototype._closeRank = function () {
+  sfx.playClick()
   this.showRank = false
 }
 HomeScreen.prototype._openSettings = function () {
@@ -820,14 +870,7 @@ HomeScreen.prototype._startPuzzle = function () {
       try { wx.showToast({ title: '关卡图片地址缺失', icon: 'none' }) } catch (e) {}
       return
     }
-    var PuzzleScreen = require('./puzzle-screen')
-    self.manager.push(new PuzzleScreen({
-      image: resolved.image,
-      grid: resolved.grid,
-      timeLimit: resolved.timeLimit,
-      levelKey: resolved.key,
-      levelLabel: resolved.name
-    }))
+    prefetch.enterPuzzleWhenReady(self.manager, resolved, 0)
   }
 
   function tryOpen() {

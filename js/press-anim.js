@@ -1,9 +1,9 @@
-/** 按钮点击：轻微放大再收回（ms） */
-var BTN_PRESS_ANIM_MS = 320
+/** 按钮点击：轻微放大再收回（ms），结束后再打开弹窗 */
+var BTN_PRESS_ANIM_MS = 220
 var BTN_PRESS_SCALE_MAX = 1.12
 
 /** 弹窗出场：由小放大至正常尺寸 */
-var MODAL_ENTER_MS = 360
+var MODAL_ENTER_MS = 300
 var MODAL_ENTER_SCALE_MIN = 0.78
 var MODAL_OVERLAY_ALPHA = 0.55
 

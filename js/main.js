@@ -40,6 +40,7 @@ GameGlobal._jp = { canvas: canvas, ctx: ctx, width: W, height: H, dpr: DPR }
 var CORE_ASSETS = [
   'images/home-bg.jpg',
   'images/home-hero.png',
+  'images/home-hero-grid-bg.png',
   'images/icons/rank.png',
   'images/icons/level.png',
   'images/icons/gallery.png',
@@ -102,12 +103,27 @@ function bootstrapData() {
     splash.progress = Math.max(splash.progress, 0.78)
     return progress.loadFromServer()
   }).then(function () {
-    splash.progress = Math.max(splash.progress, 0.92)
+    splash.hint = '正在加载主题封面...'
+    splash.progress = Math.max(splash.progress, 0.86)
+    return prefetch.waitForCurrentThemeCover(12000)
+  }).then(function (coverResult) {
+    if (coverResult && coverResult.ok && !coverResult.skipped) {
+      splash.hint = '加载完成'
+    } else if (coverResult && coverResult.timeout) {
+      splash.hint = '封面加载较慢，即将进入'
+    } else if (coverResult && coverResult.skipped) {
+      splash.hint = '加载完成'
+    } else {
+      splash.hint = '封面加载失败，即将进入'
+    }
+    splash.progress = Math.max(splash.progress, 0.95)
     prefetch.prefetchNextLevelAssets()
   }).catch(function (err) {
     console.warn('[main] bootstrap failed', err)
     splash.hint = '部分数据加载失败，即将进入'
-    return progress.loadFromServer().catch(function () {})
+    return progress.loadFromServer().catch(function () {}).then(function () {
+      return prefetch.waitForCurrentThemeCover(8000)
+    }).catch(function () {})
   })
 }
 
@@ -144,7 +160,7 @@ wx.onShow(function () {
   }).then(function () {
     return progress.loadFromServer()
   }).then(function () {
-    prefetch.prefetchNextLevelAssets()
+    prefetch.prefetchHomeAssets()
   }).catch(function () {})
 })
 wx.onHide(function () { bgm.pause() })
