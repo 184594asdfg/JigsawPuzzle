@@ -15,9 +15,12 @@ var baseURL = env === 'development'
   ? 'http://localhost:3003/api'
   : 'https://vapi.pastecuts.cn/booksnap/api'
 
+var cdnPrefix = 'https://cdn2.pastecuts.cn/jigsaw/'
+
 module.exports = {
   env: env,
   baseURL: baseURL,
+  cdnPrefix: cdnPrefix,
   loginKey: 'jigsaw',
   api: {
     login: '/user/wxMiniLoginByCode',

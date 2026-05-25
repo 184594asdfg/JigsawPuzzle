@@ -13,8 +13,8 @@ var assets = require('../assets')
 var draw = require('../draw')
 var settings = require('../../utils/settings')
 
-var SRC_IMAGE_W = 840
-var SRC_IMAGE_H = 1260
+var SRC_IMAGE_W = 750
+var SRC_IMAGE_H = 1125
 var ANIM_DUR = 220
 var MERGE_FX_DUR = 1100
 
@@ -112,11 +112,8 @@ PuzzleEngine.prototype.start = function () {
     assets.load(self.imageSrc).then(function (img) {
       if (img && img.width && img.height &&
         (img.width !== SRC_IMAGE_W || img.height !== SRC_IMAGE_H)) {
-        wx.showModal && wx.showModal({
-          title: '图片尺寸不符',
-          content: '请使用 ' + SRC_IMAGE_W + '×' + SRC_IMAGE_H + ' 像素（2:3）的素材',
-          showCancel: false
-        })
+        console.warn('[puzzle] image size mismatch:', img.width, img.height,
+          'expected', SRC_IMAGE_W, SRC_IMAGE_H)
       }
       self.image = img
       self._initPieces()

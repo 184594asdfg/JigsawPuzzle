@@ -19,13 +19,20 @@ BaseScreen.prototype.onResume = function () {}
 BaseScreen.prototype.update = function (/* dt */) {}
 BaseScreen.prototype.render = function (/* ctx */) {}
 
-/** 触点中只取首个；mini-game 中 touches/changedTouches 都是数组 */
+/** 触点坐标归一化为逻辑像素（与 layout / hitZone 一致） */
 BaseScreen.prototype._firstTouch = function (e) {
   var t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0])
   if (!t) return null
-  // 小游戏 Canvas 优先用 x/y（逻辑像素）；部分环境仅有 clientX/clientY
+  var rpxMod = require('../rpx')
+  var W = rpxMod.windowWidth()
+  var H = rpxMod.windowHeight()
   var x = typeof t.x === 'number' ? t.x : t.clientX
   var y = typeof t.y === 'number' ? t.y : t.clientY
+  if (x > W + 2 || y > H + 2) {
+    var dpr = rpxMod.pixelRatio() || 1
+    x = x / dpr
+    y = y / dpr
+  }
   return { x: x, y: y, identifier: t.identifier }
 }
 

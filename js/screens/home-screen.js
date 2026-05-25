@@ -9,6 +9,7 @@ var settingsModal = require('../settings-modal')
 var rankData = require('../../utils/rank-data')
 var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
+var prefetch = require('../../utils/prefetch')
 
 var HOME_BG = 'images/home-bg.jpg'
 var HOME_HERO = 'images/home-hero.png'
@@ -41,7 +42,10 @@ var HERO_ASPECT = 5 / 7
 /** hero 相对垂直居中的额外下移（rpx） */
 var HERO_OFFSET_Y_RPX = 20
 var NAV_BAR_H_RPX = 88
-// hero 上方浮层 3:4 区域（叠在 hero 顶部，距 hero 左/右/上 等距）
+// hero 上方拼图预览区：设计稿 750×1000（3:4）
+var TOP_AREA_W_RPX = 750
+var TOP_AREA_H_RPX = 1000
+var TOP_AREA_ASPECT = TOP_AREA_W_RPX / TOP_AREA_H_RPX
 var TOP_AREA_INSET_RPX = 32
 
 function getBottomBarMetrics(H) {
@@ -105,10 +109,10 @@ function layoutHome(W, H) {
   if (heroY > heroYMax) heroY = heroYMax
 
   var inset = rpx.rpx(TOP_AREA_INSET_RPX)
-  var topAreaX = heroX + inset
+  var topAreaW = Math.min(rpx.rpx(TOP_AREA_W_RPX), Math.max(0, heroW - inset * 2))
+  var topAreaH = topAreaW / TOP_AREA_ASPECT
+  var topAreaX = heroX + (heroW - topAreaW) / 2
   var topAreaY = heroY + inset
-  var topAreaW = Math.max(0, heroW - inset * 2)
-  var topAreaH = topAreaW * 4 / 3
 
   var mainCx = W / 2
   var mainCy = bar.mainCy
@@ -176,12 +180,16 @@ HomeScreen.prototype.constructor = HomeScreen
 HomeScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
   settingsModal.preload()
+  prefetch.prefetchNextLevelAssets()
 }
 
 HomeScreen.prototype.onResume = function () {
   this.showRank = false
   this.showSettings = false
-  progress.loadFromServer()
+  var self = this
+  progress.loadFromServer().then(function () {
+    prefetch.prefetchNextLevelAssets()
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -236,16 +244,11 @@ HomeScreen.prototype.render = function (ctx) {
     var next = progress.getNextLevel(galleryData.getThemes())
     var label = layout.themeLabel
     if (next && next.theme && label.gapBottom > label.gapTop) {
-      ctx.save()
-      ctx.shadowColor = 'rgba(0,0,0,0.45)'
-      ctx.shadowBlur = rpx.rpx(8)
-      ctx.shadowOffsetY = rpx.rpx(2)
       draw.fillTextCenteredSpacing(
         ctx, next.theme.name, label.centerX, label.y,
-        '700 ' + rpx.rpx(48).toFixed(0) + 'px sans-serif', '#663f1f',
+        '400 ' + rpx.rpx(48).toFixed(0) + 'px sans-serif', '#663f1f',
         rpx.rpx(8)
       )
-      ctx.restore()
     }
   }
 
@@ -272,9 +275,9 @@ HomeScreen.prototype.render = function (ctx) {
 }
 
 /**
- * hero 上方 3:4 区域：
- *   - 当前主题图（cover 填满，3:4）
- *   - 上叠 4×4 拼图分块网格线（白色细描边）
+ * hero 上方 3:4 区域（设计稿 750×1000）：
+ *   - 当前主题 cover 图 cover 填满
+ *   - 上叠 5×5 拼图分块网格线（白色细描边）
  *   - 区域下方居中显示主题名
  */
 HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
@@ -288,11 +291,14 @@ HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
   ctx.fillStyle = 'rgba(255,255,255,0.06)'
   ctx.fillRect(x, y, w, h)
 
-  // 主题图
+  // 主题封面：CDN + imageFolder + cover.jpg
+  var coverUrl = theme && theme.imageFolder
+    ? galleryData.buildThemeCoverUrl(theme.imageFolder)
+    : (theme && theme.themeImage ? theme.themeImage : '')
   var themeImg = null
-  if (theme && theme.themeImage) {
-    themeImg = assets.get(theme.themeImage)
-    if (!themeImg) assets.load(theme.themeImage)
+  if (coverUrl) {
+    themeImg = assets.get(coverUrl)
+    if (!themeImg) assets.tryLoad(coverUrl)
   }
   if (themeImg) {
     draw.drawImageCover(ctx, themeImg, x, y, w, h)
@@ -302,8 +308,8 @@ HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
     if (fallback) draw.drawImageCover(ctx, fallback, x, y, w, h)
   }
 
-  // 4×4 拼图分块网格
-  this._drawPuzzleGrid(ctx, x, y, w, h, 4, 4)
+  // 5×5 拼图分块网格
+  this._drawPuzzleGrid(ctx, x, y, w, h, 5, 5)
   ctx.restore()
 
   // 外圈细描边
@@ -747,16 +753,49 @@ HomeScreen.prototype._openGallery = function () {
   this.manager.push(new GalleryScreen())
 }
 HomeScreen.prototype._startPuzzle = function () {
-  var PuzzleScreen = require('./puzzle-screen')
-  var next = progress.getNextLevel(galleryData.getThemes())
-  if (!next || !next.level) return
-  var lv = next.level
-  this.manager.push(new PuzzleScreen({
-    image: lv.image,
-    grid: lv.grid || galleryData.DEFAULT_GRID,
-    levelKey: lv.key,
-    levelLabel: '关卡' + (next.globalIndex + 1)
-  }))
+  var self = this
+  function openLevel(next) {
+    if (!next || !next.level || !next.level.key || !next.theme) {
+      try {
+        wx.showToast({ title: '暂无关卡数据', icon: 'none' })
+      } catch (e) {}
+      return
+    }
+    var resolved = galleryData.resolveLevelForPlay(
+      next.theme.id, next.level.key, next.level.level, next.level
+    )
+    if (!resolved.image) {
+      try { wx.showToast({ title: '关卡图片地址缺失', icon: 'none' }) } catch (e) {}
+      return
+    }
+    var PuzzleScreen = require('./puzzle-screen')
+    self.manager.push(new PuzzleScreen({
+      image: resolved.image,
+      grid: resolved.grid,
+      timeLimit: resolved.timeLimit,
+      levelKey: resolved.key,
+      levelLabel: resolved.name
+    }))
+  }
+
+  function tryOpen() {
+    var next = progress.findFirstPlayableLevel(galleryData.getThemes())
+    if (!next || !next.theme) {
+      openLevel(null)
+      return
+    }
+    galleryData.ensureThemeLevels(next.theme.id).then(function () {
+      openLevel(progress.findFirstPlayableLevel(galleryData.getThemes()))
+    }).catch(function () {
+      openLevel(next)
+    })
+  }
+
+  if (!galleryData.isLoaded() || !galleryData.getThemes().length) {
+    galleryData.loadThemes({ summary: true }).then(tryOpen).catch(tryOpen)
+    return
+  }
+  tryOpen()
 }
 
 HomeScreen.layoutHome = layoutHome

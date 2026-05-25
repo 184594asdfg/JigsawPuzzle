@@ -1,130 +1,203 @@
 /**
- * 图库主题与关卡（仅从接口加载，失败时用本地兜底）
+ * 图库主题与关卡（仅从接口加载；默认只拉主题摘要，关卡按需加载）
  */
 var jigsawApi = require('./jigsaw-api')
+var config = require('./app-config')
 
-var LEVELS_PER_THEME = 6
 var DEFAULT_GRID = 4
+var LEVELS_PER_THEME = 25
 
 var THEME_CARD_UNLOCKED = 'images/themes/theme-unlocked.png'
 var THEME_CARD_LOCKED = 'images/themes/theme-locked.png'
 var LEVEL_THUMB_PLACEHOLDER = 'images/themes/level-placeholder.png'
 
-var LEVEL_NAMES = ['初识', '进阶', '挑战', '大师', '传奇', '终极']
-
-var FALLBACK_THEME_DEFS = [
-  { id: 'meme', name: '玩梗大王', icon: '🃏', accent: '#8FB8A8', imageFolder: 'meme' },
-  { id: 'comedy', name: '喜剧之王', icon: '🎭', accent: '#9BB5A8', imageFolder: 'comedy' },
-  { id: 'movie', name: '经典影视', icon: '🎬', accent: '#7FAF9E', imageFolder: 'movie' },
-  { id: 'pet', name: '萌宠星球', icon: '🐾', accent: '#A5C4B4', imageFolder: 'pet' },
-  { id: 'food', name: '美食图鉴', icon: '🍜', accent: '#8EC4B0', imageFolder: 'food' },
-  { id: 'nature', name: '自然风光', icon: '🏔', accent: '#7EB8A6', imageFolder: 'nature' },
-  { id: 'anime', name: '动漫回忆', icon: '✨', accent: '#94BFAE', imageFolder: 'anime' },
-  { id: 'sport', name: '体育竞技', icon: '⚽', accent: '#86B5A3', imageFolder: 'sport' },
-  { id: 'art', name: '艺术典藏', icon: '🎨', accent: '#9AB8A9', imageFolder: 'art' },
-  { id: 'festival', name: '节日特辑', icon: '🎉', accent: '#8AB9A7', imageFolder: 'festival' },
-  { id: 'city', name: '都市印象', icon: '🌆', accent: '#7DAF9C', imageFolder: 'city' },
-  { id: 'childhood', name: '童心未泯', icon: '🧸', accent: '#A0C2B2', imageFolder: 'childhood' }
-]
-
 var THEMES = []
 var loaded = false
-var fromApi = false
+var loadError = null
 var loadingPromise = null
+var themeLevelsLoading = {}
 
-function buildFallbackLevels(themeId, themeName) {
-  var arr = []
-  for (var i = 0; i < LEVEL_NAMES.length; i++) {
-    var level = i + 1
-    arr.push({
-      key: themeId + '_' + level,
-      themeId: themeId,
-      level: level,
-      name: themeName + '·' + LEVEL_NAMES[i],
-      image: 'images/photo1.jpg',
-      grid: DEFAULT_GRID
-    })
+function buildThemeCoverUrl(imageFolder) {
+  if (!imageFolder) return ''
+  var prefix = config.cdnPrefix || ''
+  if (!prefix) return ''
+  if (prefix.charAt(prefix.length - 1) !== '/') prefix += '/'
+  var folder = imageFolder.replace(/^\/+/, '').replace(/\/+$/, '')
+  return prefix + folder + '/cover.jpg'
+}
+
+function buildLevelKey(themeId, levelNum) {
+  return themeId + '_' + levelNum
+}
+
+function buildLevelImageUrl(imageFolder, levelNum) {
+  if (!imageFolder || !levelNum) return ''
+  var prefix = config.cdnPrefix || ''
+  if (!prefix) return ''
+  if (prefix.charAt(prefix.length - 1) !== '/') prefix += '/'
+  var folder = imageFolder.replace(/^\/+/, '').replace(/\/+$/, '')
+  var num = levelNum < 10 ? '0' + levelNum : String(levelNum)
+  return prefix + folder + '/' + num + '.png'
+}
+
+function resolveLevelImage(theme, levelNum, level) {
+  if (level && level.image) return level.image
+  if (theme && theme.imageFolder && levelNum) {
+    return buildLevelImageUrl(theme.imageFolder, levelNum)
   }
-  return arr
+  return ''
 }
 
-function buildFallbackThemes() {
-  return FALLBACK_THEME_DEFS.map(function (t) {
-    return {
-      id: t.id,
-      name: t.name,
-      icon: t.icon,
-      accent: t.accent,
-      imageFolder: t.imageFolder,
-      themeImage: 'images/themes/' + t.id + '.jpg',
-      totalLevels: LEVELS_PER_THEME,
-      levels: buildFallbackLevels(t.id, t.name)
+function resolveLevelForPlay(themeId, levelKey, levelNum, partial) {
+  var theme = getThemeById(themeId)
+  var num = levelNum || (partial && partial.level) || 0
+  var lv = partial || null
+  if (theme && theme.levels && theme.levels.length) {
+    for (var i = 0; i < theme.levels.length; i++) {
+      if (theme.levels[i].key === levelKey ||
+        theme.levels[i].level === num) {
+        lv = theme.levels[i]
+        num = lv.level
+        break
+      }
     }
-  })
+  }
+  var key = levelKey || buildLevelKey(themeId, num)
+  return {
+    key: key,
+    themeId: themeId,
+    level: num,
+    name: (lv && lv.name) ? lv.name : ('关卡 ' + num),
+    image: resolveLevelImage(theme, num, lv),
+    grid: (lv && lv.grid) ? lv.grid : DEFAULT_GRID,
+    timeLimit: (lv && lv.timeLimit) ? lv.timeLimit : 0
+  }
 }
 
-function normalizeLevel(level, themeId) {
+function normalizeLevel(level, themeId, imageFolder) {
+  var levelNum = level.level != null ? level.level : (level.levelNum || 0)
+  var image = level.image || level.imageUrl || ''
+  if (!image && imageFolder && levelNum) {
+    image = buildLevelImageUrl(imageFolder, levelNum)
+  }
   return {
     key: level.key || level.levelKey || '',
     themeId: level.themeId || themeId || '',
-    level: level.level != null ? level.level : (level.levelNum || 0),
+    level: levelNum,
     name: level.name || '',
-    image: level.image || level.imageUrl || '',
-    grid: level.grid != null ? level.grid : (level.gridSize || DEFAULT_GRID)
+    image: image,
+    grid: level.grid != null ? level.grid : (level.gridSize || DEFAULT_GRID),
+    timeLimit: level.timeLimit != null ? level.timeLimit : (level.timeLimitSec || 0)
   }
 }
 
 function normalizeTheme(theme) {
   var id = theme.id || theme.themeId || ''
   var rawLevels = theme.levels || []
+  var imageFolder = theme.imageFolder || ''
   var levels = []
   for (var i = 0; i < rawLevels.length; i++) {
-    levels.push(normalizeLevel(rawLevels[i], id))
+    levels.push(normalizeLevel(rawLevels[i], id, imageFolder))
   }
+  var totalLevels = theme.totalLevels != null ? theme.totalLevels : levels.length
+  if (!totalLevels && levels.length) totalLevels = levels.length
   return {
     id: id,
     name: theme.name || '',
     icon: theme.icon || '',
     accent: theme.accent || '',
     imageFolder: theme.imageFolder || '',
-    themeImage: theme.themeImage || theme.theme_image_url || '',
-    totalLevels: theme.totalLevels != null ? theme.totalLevels : levels.length,
-    levels: levels
+    themeImage: theme.themeImage || theme.theme_image_url ||
+      buildThemeCoverUrl(theme.imageFolder || ''),
+    totalLevels: totalLevels,
+    levels: levels,
+    levelsLoaded: levels.length > 0
   }
 }
 
-function setThemes(list, apiSource) {
+function mergeThemeList(list) {
+  var map = {}
+  for (var i = 0; i < THEMES.length; i++) {
+    map[THEMES[i].id] = THEMES[i]
+  }
   THEMES.length = 0
-  for (var i = 0; i < list.length; i++) {
-    THEMES.push(normalizeTheme(list[i]))
+  for (var j = 0; j < list.length; j++) {
+    var incoming = normalizeTheme(list[j])
+    var existing = map[incoming.id]
+    if (existing && existing.levelsLoaded && existing.levels.length) {
+      incoming.levels = existing.levels
+      incoming.levelsLoaded = true
+    }
+    THEMES.push(incoming)
   }
   loaded = true
-  fromApi = !!apiSource
 }
 
-function useFallback() {
-  setThemes(buildFallbackThemes(), false)
-  console.warn('[gallery-data] using local fallback themes')
-  return THEMES
+function setThemes(list) {
+  mergeThemeList(list)
 }
 
-function loadThemes() {
+function hasThemeLevels(theme) {
+  return !!(theme && theme.levelsLoaded && theme.levels && theme.levels.length)
+}
+
+function loadThemes(opts) {
   if (loadingPromise) return loadingPromise
 
-  loadingPromise = jigsawApi.fetchThemes().then(function (list) {
+  var summary = !opts || opts.summary !== false
+
+  loadingPromise = jigsawApi.fetchThemes({ summary: summary }).then(function (list) {
     if (!list) list = []
-    setThemes(list, true)
-    console.log('[gallery-data] loaded from api, count:', list.length)
+    loadError = null
+    setThemes(list)
+    console.log('[gallery-data] loaded themes, count:', list.length, summary ? '(summary)' : '(full)')
     return THEMES
   }).catch(function (err) {
-    console.warn('[gallery-data] api failed, use fallback', err)
-    return useFallback()
+    console.warn('[gallery-data] api failed', err)
+    loadError = err
+    setThemes([])
+    throw err
   }).then(function (themes) {
     loadingPromise = null
     return themes
+  }, function (err) {
+    loadingPromise = null
+    throw err
   })
 
   return loadingPromise
+}
+
+function ensureThemeLevels(themeId) {
+  if (!themeId) return Promise.reject(new Error('themeId required'))
+
+  var theme = getThemeById(themeId)
+  if (hasThemeLevels(theme)) return Promise.resolve(theme)
+
+  if (themeLevelsLoading[themeId]) return themeLevelsLoading[themeId]
+
+  themeLevelsLoading[themeId] = jigsawApi.fetchThemeDetail(themeId).then(function (detail) {
+    if (!detail) throw new Error('theme not found: ' + themeId)
+    var normalized = normalizeTheme(detail)
+    var target = getThemeById(themeId)
+    if (target) {
+      target.levels = normalized.levels
+      target.totalLevels = normalized.totalLevels || normalized.levels.length
+      target.levelsLoaded = normalized.levels.length > 0
+    } else {
+      THEMES.push(normalized)
+    }
+    loaded = true
+    return getThemeById(themeId)
+  }).then(function (result) {
+    delete themeLevelsLoading[themeId]
+    return result
+  }, function (err) {
+    delete themeLevelsLoading[themeId]
+    throw err
+  })
+
+  return themeLevelsLoading[themeId]
 }
 
 function getThemes() {
@@ -135,8 +208,8 @@ function isLoaded() {
   return loaded
 }
 
-function isFromApi() {
-  return fromApi
+function getLoadError() {
+  return loadError
 }
 
 function getThemeById(themeId) {
@@ -146,48 +219,33 @@ function getThemeById(themeId) {
   return null
 }
 
-function getAllLevels() {
-  var all = []
+function getLevelByKey(levelKey) {
   for (var i = 0; i < THEMES.length; i++) {
-    for (var j = 0; j < THEMES[i].levels.length; j++) {
-      all.push(THEMES[i].levels[j])
+    var levels = THEMES[i].levels || []
+    for (var j = 0; j < levels.length; j++) {
+      if (levels[j].key === levelKey) return levels[j]
     }
   }
-  return all
-}
-
-function collectLevelImageUrls() {
-  var urls = []
-  var seen = {}
-  var levels = getAllLevels()
-  for (var i = 0; i < levels.length; i++) {
-    var src = levels[i].image
-    if (src && !seen[src]) {
-      seen[src] = true
-      urls.push(src)
-    }
-  }
-  for (var j = 0; j < THEMES.length; j++) {
-    var cover = THEMES[j].themeImage
-    if (cover && !seen[cover]) {
-      seen[cover] = true
-      urls.push(cover)
-    }
-  }
-  return urls
+  return null
 }
 
 module.exports = {
-  LEVELS_PER_THEME: LEVELS_PER_THEME,
   DEFAULT_GRID: DEFAULT_GRID,
+  LEVELS_PER_THEME: LEVELS_PER_THEME,
   THEME_CARD_UNLOCKED: THEME_CARD_UNLOCKED,
   THEME_CARD_LOCKED: THEME_CARD_LOCKED,
   LEVEL_THUMB_PLACEHOLDER: LEVEL_THUMB_PLACEHOLDER,
   loadThemes: loadThemes,
+  ensureThemeLevels: ensureThemeLevels,
+  hasThemeLevels: hasThemeLevels,
   getThemes: getThemes,
   isLoaded: isLoaded,
-  isFromApi: isFromApi,
+  getLoadError: getLoadError,
   getThemeById: getThemeById,
-  getAllLevels: getAllLevels,
-  collectLevelImageUrls: collectLevelImageUrls
+  getLevelByKey: getLevelByKey,
+  buildThemeCoverUrl: buildThemeCoverUrl,
+  buildLevelImageUrl: buildLevelImageUrl,
+  buildLevelKey: buildLevelKey,
+  resolveLevelImage: resolveLevelImage,
+  resolveLevelForPlay: resolveLevelForPlay
 }

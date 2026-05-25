@@ -9,6 +9,7 @@ var settings = require('../utils/settings')
 var user = require('../utils/user')
 var galleryData = require('../utils/gallery-data')
 var progress = require('../utils/progress')
+var prefetch = require('../utils/prefetch')
 
 var canvas = wx.createCanvas()
 var ctx = canvas.getContext('2d')
@@ -84,37 +85,23 @@ function preloadAssets() {
   })
 }
 
-function preloadGameplayImages() {
-  var themes = galleryData.getThemes()
-  var next = progress.getNextLevel(themes)
-  var urls = []
-  if (next && next.theme && next.theme.themeImage) urls.push(next.theme.themeImage)
-  if (next && next.level && next.level.image) urls.push(next.level.image)
-  if (!urls.length) return Promise.resolve()
-  return assets.loadAll(urls)
-}
-
 function bootstrapData() {
   loadingHint = '加载关卡...'
   loadingProgress = 0.45
 
-  var themesPromise = galleryData.loadThemes()
+  var themesPromise = galleryData.loadThemes({ summary: true })
   var loginPromise = user.autoLogin()
 
   return Promise.all([themesPromise, loginPromise]).then(function () {
     loadingHint = '同步进度...'
-    loadingProgress = 0.75
+    loadingProgress = 0.85
     return progress.loadFromServer()
   }).then(function () {
-    loadingHint = '准备拼图...'
-    loadingProgress = 0.9
-    return preloadGameplayImages()
+    prefetch.prefetchNextLevelAssets()
   }).catch(function (err) {
     console.warn('[main] bootstrap failed', err)
-    loadingHint = '离线模式...'
-    return galleryData.loadThemes().then(function () {
-      return progress.loadFromServer()
-    })
+    loadingHint = '部分数据加载失败'
+    return progress.loadFromServer().catch(function () {})
   })
 }
 
@@ -126,10 +113,12 @@ wx.onTouchCancel(function (e) { if (appReady) screenManager.onTouchCancel(e) })
 wx.onShow(function () {
   if (!appReady) return
   bgm.sync()
-  galleryData.loadThemes().then(function () {
+  galleryData.loadThemes({ summary: true }).then(function () {
     return user.autoLogin()
   }).then(function () {
     return progress.loadFromServer()
+  }).then(function () {
+    prefetch.prefetchNextLevelAssets()
   }).catch(function () {})
 })
 wx.onHide(function () { bgm.pause() })

@@ -51,6 +51,7 @@ function PuzzleScreen(opts) {
   if (!this.gridSize || isNaN(this.gridSize)) this.gridSize = 4
   this.levelKey = opts.levelKey || ''
   this.levelLabel = opts.levelLabel || '拼图'
+  this.timeLimitSec = opts.timeLimit > 0 ? Number(opts.timeLimit) : 0
   this.engine = null
   this.loading = true
   this.showSuccess = false
@@ -62,6 +63,7 @@ function PuzzleScreen(opts) {
   this.countdownMs = 0
   this.countdownTotalMs = 0
   this.countdownEnded = false
+  this.loadError = ''
 }
 PuzzleScreen.prototype = Object.create(BaseScreen.prototype)
 PuzzleScreen.prototype.constructor = PuzzleScreen
@@ -87,12 +89,20 @@ PuzzleScreen.prototype.onExit = function () {
 PuzzleScreen.prototype._initEngine = function () {
   var self = this
   this.loading = true
+  this.loadError = ''
   this.showSuccess = false
   this.showSettings = false
   this.toolModal = null
   this.countdownEnded = false
-  this.countdownTotalMs = COUNTDOWN_DURATION_MS
-  this.countdownMs = COUNTDOWN_DURATION_MS
+  var limitMs = this.timeLimitSec > 0 ? this.timeLimitSec * 1000 : COUNTDOWN_DURATION_MS
+  this.countdownTotalMs = limitMs
+  this.countdownMs = limitMs
+  if (!this.imageSrc) {
+    this.loading = false
+    this.loadError = 'missing_image'
+    try { wx.showToast({ title: '关卡图片地址缺失', icon: 'none' }) } catch (e) {}
+    return
+  }
   if (this.engine) this.engine.destroy()
   this.engine = new PuzzleEngine({
     windowWidth: rpx.windowWidth(),
@@ -104,11 +114,16 @@ PuzzleScreen.prototype._initEngine = function () {
     },
     onAnyMove: function () {}
   })
+  var src = this.imageSrc
+  if (assets.hasFailed(src)) assets.clearFailed(src)
   this.engine.start().then(function () {
     self.loading = false
     if (self.engine) self.engine.setSfxEnabled(settings.get('sfx'))
-  }).catch(function () {
+  }).catch(function (err) {
     self.loading = false
+    self.loadError = 'load_failed'
+    console.warn('[puzzle] image load failed:', src, err)
+    try { wx.showToast({ title: '拼图图片加载失败', icon: 'none' }) } catch (e) {}
   })
 }
 
@@ -152,6 +167,18 @@ PuzzleScreen.prototype.render = function (ctx) {
     draw.fillTextCentered(
       ctx, '加载中...', W / 2, H / 2,
       '400 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', 'rgba(255,255,255,0.85)'
+    )
+    return
+  }
+
+  if (this.loadError || !this.engine.image) {
+    draw.fillTextCentered(
+      ctx, '拼图图片加载失败', W / 2, H / 2 - rpx.rpx(20),
+      '400 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', 'rgba(255,255,255,0.85)'
+    )
+    draw.fillTextCentered(
+      ctx, '请检查网络或 CDN 域名配置', W / 2, H / 2 + rpx.rpx(20),
+      '400 ' + rpx.rpx(24).toFixed(0) + 'px sans-serif', 'rgba(255,255,255,0.65)'
     )
     return
   }

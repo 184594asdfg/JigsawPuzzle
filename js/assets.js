@@ -1,5 +1,6 @@
 /**
  * 图片资源加载器：支持包内路径与 CDN 远程 URL（远程走 wx.downloadFile）
+ * 加载失败会标记 failed，不会每帧重复请求。
  */
 var cache = {}
 
@@ -37,24 +38,57 @@ function loadImage(src) {
   })
 }
 
+function markFailed(src, err) {
+  cache[src] = {
+    ready: false,
+    failed: true,
+    image: null,
+    promise: null,
+    error: err || new Error('load failed')
+  }
+}
+
 function load(src) {
   if (!src) return Promise.reject(new Error('empty src'))
-  if (cache[src] && cache[src].ready) return Promise.resolve(cache[src].image)
-  if (cache[src] && cache[src].promise) return cache[src].promise
+
+  var entry = cache[src]
+  if (entry && entry.ready) return Promise.resolve(entry.image)
+  if (entry && entry.failed) {
+    return Promise.reject(entry.error || new Error('load failed: ' + src))
+  }
+  if (entry && entry.promise) return entry.promise
 
   var promise = resolveSrc(src).then(function (resolved) {
     return loadImage(resolved)
   }).then(function (img) {
-    cache[src].ready = true
-    cache[src].image = img
+    cache[src] = {
+      ready: true,
+      failed: false,
+      image: img,
+      promise: null,
+      error: null
+    }
     return img
   }).catch(function (err) {
-    cache[src] = null
+    markFailed(src, err)
+    console.warn('[assets] load failed:', src, err && err.message ? err.message : err)
     throw err
   })
 
-  cache[src] = { image: null, promise: promise, ready: false }
+  cache[src] = {
+    ready: false,
+    failed: false,
+    image: null,
+    promise: promise,
+    error: null
+  }
   return promise
+}
+
+/** 渲染循环里用：未加载且未失败时尝试一次，失败静默 */
+function tryLoad(src) {
+  if (!src || get(src) || hasFailed(src) || isLoading(src)) return
+  load(src).catch(function () {})
 }
 
 function loadAll(srcList) {
@@ -68,15 +102,40 @@ function get(src) {
   return entry && entry.ready ? entry.image : null
 }
 
+function hasFailed(src) {
+  var entry = cache[src]
+  return !!(entry && entry.failed)
+}
+
+function isLoading(src) {
+  var entry = cache[src]
+  return !!(entry && entry.promise && !entry.ready && !entry.failed)
+}
+
 function size(src) {
   var img = get(src)
   if (!img) return null
   return { w: img.width, h: img.height }
 }
 
+function clearFailed(src) {
+  if (!src || !cache[src]) return
+  delete cache[src]
+}
+
+function retryLoad(src) {
+  clearFailed(src)
+  return load(src)
+}
+
 module.exports = {
   load: load,
+  tryLoad: tryLoad,
   loadAll: loadAll,
   get: get,
+  hasFailed: hasFailed,
+  isLoading: isLoading,
+  clearFailed: clearFailed,
+  retryLoad: retryLoad,
   size: size
 }

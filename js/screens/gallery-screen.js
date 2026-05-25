@@ -41,12 +41,15 @@ GalleryScreen.prototype.constructor = GalleryScreen
 GalleryScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
   var self = this
-  this.dataLoading = true
   assets.load(NAV_BACK_ICON)
-  galleryData.loadThemes().then(function () {
+  if (galleryData.isLoaded()) {
+    this._refresh()
+  } else {
+    this.dataLoading = true
+  }
+  galleryData.loadThemes({ summary: true }).then(function () {
     self.dataLoading = false
     self._refresh()
-    self._preloadLevelImages()
   }).catch(function () {
     self.dataLoading = false
     self._refresh()
@@ -55,7 +58,7 @@ GalleryScreen.prototype.onEnter = function (manager) {
 
 GalleryScreen.prototype.onResume = function () {
   var self = this
-  galleryData.loadThemes().then(function () {
+  galleryData.loadThemes({ summary: true }).then(function () {
     return progress.loadFromServer()
   }).then(function () {
     self._refresh()
@@ -87,31 +90,46 @@ GalleryScreen.prototype._refresh = function () {
   this.scrollY = 0
 }
 
-GalleryScreen.prototype._preloadLevelImages = function () {
-  var urls = galleryData.collectLevelImageUrls()
-  if (urls.length) assets.loadAll(urls)
-}
+// ---------------------------------------------------------------------------
+//  渲染
+// ---------------------------------------------------------------------------
 
 GalleryScreen.prototype._buildCurrentTheme = function (themeId) {
   var t = galleryData.getThemeById(themeId)
   if (!t) return null
   var levels = []
-  for (var i = 0; i < t.levels.length; i++) {
-    var l = t.levels[i]
+  var total = t.totalLevels || galleryData.LEVELS_PER_THEME
+  var sourceLevels = galleryData.hasThemeLevels(t) ? t.levels : []
+
+  for (var n = 1; n <= total; n++) {
+    var l = null
+    for (var i = 0; i < sourceLevels.length; i++) {
+      if (sourceLevels[i].level === n) {
+        l = sourceLevels[i]
+        break
+      }
+    }
+    var key = l ? l.key : galleryData.buildLevelKey(t.id, n)
+    var done = progress.isLevelComplete(key)
+    var image = ''
+    if (done) {
+      image = (l && l.image) ? l.image : galleryData.buildLevelImageUrl(t.imageFolder, n)
+    }
     levels.push({
-      key: l.key,
-      themeId: l.themeId,
-      level: l.level,
-      name: l.name,
-      image: l.image,
-      grid: l.grid,
-      done: progress.isLevelComplete(l.key)
+      key: key,
+      themeId: t.id,
+      level: l ? l.level : n,
+      name: l ? l.name : ('关卡 ' + n),
+      image: image,
+      grid: l ? l.grid : galleryData.DEFAULT_GRID,
+      timeLimit: l ? l.timeLimit : 0,
+      done: done
     })
   }
   return {
     id: t.id,
     name: t.name,
-    totalLevels: t.totalLevels,
+    totalLevels: total,
     levels: levels
   }
 }
@@ -141,6 +159,18 @@ GalleryScreen.prototype.render = function (ctx) {
   if (this.dataLoading || !galleryData.isLoaded()) {
     draw.fillTextCentered(
       ctx, '加载图集中...', W / 2, H / 2,
+      '400 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', TEXT_HEADER
+    )
+    return
+  }
+
+  if (!this.themes.length) {
+    var navY = rpx.safeTop()
+    var navH = rpx.rpx(88)
+    this._drawNav(ctx, 0, navY, W, navH)
+    var emptyHint = galleryData.getLoadError() ? '加载失败，请稍后重试' : '暂无主题数据'
+    draw.fillTextCentered(
+      ctx, emptyHint, W / 2, H / 2,
       '400 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', TEXT_HEADER
     )
     return
@@ -323,12 +353,12 @@ GalleryScreen.prototype._drawLevelCard = function (ctx, level, x, y, w, h) {
   ctx.translate(-cx, -cy)
   draw.roundedRectPath(ctx, x, y, w, h, rpx.rpx(16))
   ctx.clip()
-  if (level.done) {
+  if (level.done && level.image) {
     var img = assets.get(level.image)
     if (img) {
       draw.drawImageCover(ctx, img, x, y, w, h)
     } else {
-      assets.load(level.image)
+      assets.tryLoad(level.image)
       ctx.fillStyle = '#1f5c9c'
       ctx.fillRect(x, y, w, h)
     }
@@ -408,11 +438,12 @@ GalleryScreen.prototype.onTouchEnd = function (e) {
   var t = this._firstTouch(e)
   if (!t) return
 
-  if (this._drag && this._drag.moved) {
-    this._drag = null
-    return
-  }
+  var drag = this._drag
   this._drag = null
+  if (drag && drag.moved) {
+    var dy = t.y - drag.startY
+    if (Math.abs(dy) > 12) return
+  }
 
   if (this.showFullscreen) {
     var zoneFs = this.hitZoneAt(t.x, t.y)
@@ -469,24 +500,54 @@ GalleryScreen.prototype._onTapTheme = function (item) {
 }
 
 GalleryScreen.prototype._onTapLevel = function (level) {
-  if (level.done) {
-    this.showFullscreen = true
-    this.fullscreenImage = level.image
+  if (!level || !level.key) {
+    try { wx.showToast({ title: '关卡数据无效', icon: 'none' }) } catch (e) {}
     return
   }
-  // 未完成 → 触发脉冲并打开拼图关卡
-  this.pulseKey = level.key
-  this._pulseTime = 0
   var self = this
-  setTimeout(function () {
-    var PuzzleScreen = require('./puzzle-screen')
-    self.manager.push(new PuzzleScreen({
-      image: level.image,
-      grid: level.grid != null ? level.grid : galleryData.DEFAULT_GRID,
-      levelKey: level.key,
-      levelLabel: '关卡' + level.level
-    }))
-  }, 320)
+  function open(lv) {
+    if (!lv || !lv.key) {
+      try { wx.showToast({ title: '关卡数据无效', icon: 'none' }) } catch (e) {}
+      return
+    }
+    var resolved = galleryData.resolveLevelForPlay(lv.themeId, lv.key, lv.level, lv)
+    if (lv.done) {
+      if (!resolved.image) {
+        try { wx.showToast({ title: '图片加载中', icon: 'none' }) } catch (e) {}
+        return
+      }
+      if (!assets.get(resolved.image)) assets.tryLoad(resolved.image)
+      self.showFullscreen = true
+      self.fullscreenImage = resolved.image
+      return
+    }
+    if (!resolved.image) {
+      try { wx.showToast({ title: '关卡图片地址缺失', icon: 'none' }) } catch (e) {}
+      return
+    }
+    self.pulseKey = resolved.key
+    self._pulseTime = 0
+    setTimeout(function () {
+      var PuzzleScreen = require('./puzzle-screen')
+      self.manager.push(new PuzzleScreen({
+        image: resolved.image,
+        grid: resolved.grid,
+        timeLimit: resolved.timeLimit,
+        levelKey: resolved.key,
+        levelLabel: resolved.name
+      }))
+    }, 320)
+  }
+
+  if (level.done) {
+    open(level)
+    return
+  }
+  galleryData.ensureThemeLevels(level.themeId).then(function () {
+    open(galleryData.getLevelByKey(level.key) || level)
+  }).catch(function () {
+    open(level)
+  })
 }
 
 GalleryScreen.prototype._closeFullscreen = function () {
