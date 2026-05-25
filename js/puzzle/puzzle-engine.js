@@ -17,6 +17,10 @@ var sfx = require('../sfx')
 var SRC_IMAGE_W = 750
 var SRC_IMAGE_H = 1125
 var ANIM_DUR = 220
+/** 提示移动/交换动画（比常规拖拽慢，便于看清） */
+var HINT_ANIM_DUR = 2000
+/** 提示程序化拖动：只移到目标方向约八成，松手后再交换落位 */
+var HINT_DRAG_VISUAL_RATIO = 0.78
 var MERGE_FX_DUR = 1100
 /** 开局：拼图区右下角叠成一摞 → 顶牌飞出 → 每块绕自身水平中线翻面 */
 var INTRO_STAGGER_MS = 42
@@ -67,6 +71,7 @@ function PuzzleEngine(opts) {
   this._intro = null      // { phase, stackX, stackY, ... }
   this._introPending = false
   this._inputLocked = false
+  this._hintDrag = null
   this.onWin = opts.onWin || function () {}
   this.onAnyMove = opts.onAnyMove || function () {}
   this.onIntroComplete = opts.onIntroComplete || function () {}
@@ -112,7 +117,11 @@ PuzzleEngine.prototype.setBoardPosition = function (x, y) {
 }
 
 PuzzleEngine.prototype.isInputLocked = function () {
-  return !!this._inputLocked
+  if (this._inputLocked) return true
+  if (this._hintDrag) return true
+  if (Object.keys(this._anims).length > 0) return true
+  if (Object.keys(this._groupAnims).length > 0) return true
+  return false
 }
 
 PuzzleEngine.prototype.isIntroPlaying = function () {
@@ -164,6 +173,7 @@ PuzzleEngine.prototype._initPieces = function () {
   this._groupAnims = {}
   this._mergeFx = null
   this._intro = null
+  this._hintDrag = null
   this.groups = this._buildGroups()
   this._introPending = true
 }
@@ -532,6 +542,8 @@ PuzzleEngine.prototype.update = function (/* dt */) {
     else this._mergeFx.t = tm
   }
 
+  if (this._hintDrag) this._tickHintProgramDrag()
+
   if (this._intro) {
     if (this._intro.phase === 'deal') {
       if (now >= this._intro.dealEndTime && Object.keys(this._anims).length === 0) {
@@ -836,28 +848,12 @@ PuzzleEngine.prototype.onTouchMove = function (sx, sy) {
   this.dragInfo.group.ty = dy
 }
 
-PuzzleEngine.prototype.onTouchEnd = function () {
-  if (!this.dragInfo) return
-  var info = this.dragInfo
-  this.dragInfo = null
-  var group = info.group
-  group.dragging = false
-
-  var L = this.layout
+/** 规划一组块按格偏移移动；失败返回 null */
+PuzzleEngine.prototype._planGroupMove = function (memberIds, colDelta, rowDelta) {
   var N = this.gridSize
-  var dxPx = Math.round(group.tx)
-  var dyPx = Math.round(group.ty)
-  var colDelta = Math.round(dxPx / L.stepX)
-  var rowDelta = Math.round(dyPx / L.stepY)
-
-  if (colDelta === 0 && rowDelta === 0) {
-    return this._settleNoSwap(group)
-  }
-
   var byId = {}
   for (var i = 0; i < this.pieces.length; i++) byId[this.pieces[i].id] = this.pieces[i]
 
-  var memberIds = info.memberIds
   var memberSet = {}
   for (var m = 0; m < memberIds.length; m++) memberSet[memberIds[m]] = true
 
@@ -868,9 +864,10 @@ PuzzleEngine.prototype.onTouchEnd = function () {
     var gRow = Math.floor(mp.currentIndex / N)
     var nc = gCol + colDelta
     var nr = gRow + rowDelta
-    if (nc < 0 || nc >= N || nr < 0 || nr >= N) return this._settleNoSwap(group)
+    if (nc < 0 || nc >= N || nr < 0 || nr >= N) return null
     newSlotById[mp.id] = nr * N + nc
   }
+
   var oldSlotSet = {}
   var newSlotSet = {}
   for (var s = 0; s < memberIds.length; s++) {
@@ -888,9 +885,7 @@ PuzzleEngine.prototype.onTouchEnd = function () {
     if (memberSet[pp.id]) continue
     if (newSlotSet[pp.currentIndex]) displaced.push(pp)
   }
-  if (displaced.length !== vacated.length) {
-    return this._settleNoSwap(group)
-  }
+  if (displaced.length !== vacated.length) return null
 
   var used = {}
   var assignment = {}
@@ -908,12 +903,187 @@ PuzzleEngine.prototype.onTouchEnd = function () {
       var dist = Math.hypot(dCol - vCol, dRow - vRow)
       if (dist < bestDist) { bestDist = dist; bestV = vIdx }
     }
-    if (bestV < 0) return this._settleNoSwap(group)
+    if (bestV < 0) return null
     used[bestV] = true
     assignment[dpiece.id] = bestV
   }
 
-  this._commitMove(memberIds, newSlotById, assignment)
+  return { newSlotById: newSlotById, assignment: assignment }
+}
+
+/** 行优先找第一个放错格的 slot（piece.originalIndex !== slot） */
+PuzzleEngine.prototype._findFirstWrongSlot = function () {
+  var N = this.gridSize
+  var bySlot = {}
+  for (var i = 0; i < this.pieces.length; i++) {
+    bySlot[this.pieces[i].currentIndex] = this.pieces[i]
+  }
+  for (var row = 0; row < N; row++) {
+    for (var col = 0; col < N; col++) {
+      var slot = row * N + col
+      var p = bySlot[slot]
+      if (!p || p.originalIndex !== slot) return slot
+    }
+  }
+  return -1
+}
+
+PuzzleEngine.prototype._findPieceByOriginalIndex = function (slot) {
+  for (var i = 0; i < this.pieces.length; i++) {
+    if (this.pieces[i].originalIndex === slot) return this.pieces[i]
+  }
+  return null
+}
+
+PuzzleEngine.prototype._findGroupByPieceId = function (pieceId) {
+  for (var g = 0; g < this.groups.length; g++) {
+    var grp = this.groups[g]
+    for (var pi = 0; pi < grp.pieces.length; pi++) {
+      if (grp.pieces[pi].id === pieceId) return grp
+    }
+  }
+  return null
+}
+
+/** 落子后无法按拖拽规则交换时：正确块与错格块对调 slot */
+PuzzleEngine.prototype._hintSwapPieces = function (correctPiece, wrongPiece, targetSlot) {
+  var newSlotById = {}
+  newSlotById[correctPiece.id] = targetSlot
+  var assignment = {}
+  assignment[wrongPiece.id] = correctPiece.currentIndex
+  this._commitMove([correctPiece.id], newSlotById, assignment, HINT_ANIM_DUR)
+}
+
+/** 代码模拟拖拽：正确块所在组移向目标格，松手后走与 onTouchEnd 相同的交换逻辑 */
+PuzzleEngine.prototype._startHintProgramDrag = function (correctPiece, wrongPiece, targetSlot) {
+  var group = this._findGroupByPieceId(correctPiece.id)
+  if (!group) return false
+
+  var N = this.gridSize
+  var targetCol = targetSlot % N
+  var targetRow = Math.floor(targetSlot / N)
+  var curCol = correctPiece.currentIndex % N
+  var curRow = Math.floor(correctPiece.currentIndex / N)
+  var colDelta = targetCol - curCol
+  var rowDelta = targetRow - curRow
+  if (colDelta === 0 && rowDelta === 0) return false
+
+  delete this._groupAnims[group.id]
+  for (var i = 0; i < group.pieces.length; i++) {
+    var p = group.pieces[i]
+    delete this._anims[p.id]
+    p.tx = 0
+    p.ty = 0
+  }
+  group.tx = 0
+  group.ty = 0
+  group.dragging = true
+
+  var memberIds = []
+  for (var m = 0; m < group.pieces.length; m++) memberIds.push(group.pieces[m].id)
+
+  this._hintDrag = {
+    group: group,
+    correctPiece: correctPiece,
+    wrongPiece: wrongPiece,
+    targetSlot: targetSlot,
+    colDelta: colDelta,
+    rowDelta: rowDelta,
+    memberIds: memberIds,
+    t0: Date.now()
+  }
+  this._playSound(this._moveAudio)
+  return true
+}
+
+PuzzleEngine.prototype._tickHintProgramDrag = function () {
+  var h = this._hintDrag
+  if (!h) return
+  var L = this.layout
+  var g = h.group
+  var t = (Date.now() - h.t0) / HINT_ANIM_DUR
+  var ratio = HINT_DRAG_VISUAL_RATIO
+  if (t >= 1) {
+    g.tx = Math.round(h.colDelta * L.stepX * ratio)
+    g.ty = Math.round(h.rowDelta * L.stepY * ratio)
+    this._finishHintProgramDrag()
+    return
+  }
+  var e = easeOutCubic(t) * ratio
+  g.tx = Math.round(h.colDelta * L.stepX * e)
+  g.ty = Math.round(h.rowDelta * L.stepY * e)
+}
+
+/** 模拟松手：与手动拖拽落子同一套 _planGroupMove + _commitMove */
+PuzzleEngine.prototype._finishHintProgramDrag = function () {
+  var h = this._hintDrag
+  if (!h) return
+  this._hintDrag = null
+
+  var g = h.group
+  g.dragging = false
+  var colDelta = h.colDelta
+  var rowDelta = h.rowDelta
+  var tx = g.tx || 0
+  var ty = g.ty || 0
+  g.tx = 0
+  g.ty = 0
+
+  var plan = this._planGroupMove(h.memberIds, colDelta, rowDelta)
+  if (plan) {
+    this._commitMove(h.memberIds, plan.newSlotById, plan.assignment, ANIM_DUR)
+    return
+  }
+
+  this._hintSwapPieces(h.correctPiece, h.wrongPiece, h.targetSlot)
+}
+
+/**
+ * 提示：行优先第一个错格 → 代码拖动正确块到目标格 → 自动交换
+ * @returns {boolean} 是否执行了提示
+ */
+PuzzleEngine.prototype.applyHint = function () {
+  if (this.solved || this._inputLocked || !this.pieces || this.dragInfo || this._hintDrag) {
+    return false
+  }
+
+  var targetSlot = this._findFirstWrongSlot()
+  if (targetSlot < 0) return false
+
+  var bySlot = {}
+  for (var i = 0; i < this.pieces.length; i++) {
+    bySlot[this.pieces[i].currentIndex] = this.pieces[i]
+  }
+
+  var wrongPiece = bySlot[targetSlot]
+  if (!wrongPiece) return false
+
+  var correctPiece = this._findPieceByOriginalIndex(targetSlot)
+  if (!correctPiece || correctPiece.id === wrongPiece.id) return false
+
+  return this._startHintProgramDrag(correctPiece, wrongPiece, targetSlot)
+}
+
+PuzzleEngine.prototype.onTouchEnd = function () {
+  if (!this.dragInfo) return
+  var info = this.dragInfo
+  this.dragInfo = null
+  var group = info.group
+  group.dragging = false
+
+  var L = this.layout
+  var dxPx = Math.round(group.tx)
+  var dyPx = Math.round(group.ty)
+  var colDelta = Math.round(dxPx / L.stepX)
+  var rowDelta = Math.round(dyPx / L.stepY)
+
+  if (colDelta === 0 && rowDelta === 0) {
+    return this._settleNoSwap(group)
+  }
+
+  var plan = this._planGroupMove(info.memberIds, colDelta, rowDelta)
+  if (!plan) return this._settleNoSwap(group)
+  this._commitMove(info.memberIds, plan.newSlotById, plan.assignment)
 }
 
 PuzzleEngine.prototype.onTouchCancel = function () {
@@ -937,7 +1107,8 @@ PuzzleEngine.prototype._settleNoSwap = function (group) {
   }
 }
 
-PuzzleEngine.prototype._commitMove = function (memberIds, newSlotById, assignment) {
+PuzzleEngine.prototype._commitMove = function (memberIds, newSlotById, assignment, animDur) {
+  var dur = animDur || ANIM_DUR
   var hasDisplaced = false
   for (var k in assignment) { hasDisplaced = true; break }
   if (hasDisplaced) this._playSound(this._swapAudio)
@@ -980,7 +1151,7 @@ PuzzleEngine.prototype._commitMove = function (memberIds, newSlotById, assignmen
       var piece = gg.pieces[pi]
       if (Math.abs(piece.tx) > 0.5 || Math.abs(piece.ty) > 0.5) {
         this._anims[piece.id] = {
-          fromTx: piece.tx, fromTy: piece.ty, t0: now, dur: ANIM_DUR,
+          fromTx: piece.tx, fromTy: piece.ty, t0: now, dur: dur,
           curTx: piece.tx, curTy: piece.ty
         }
         piece.tx = 0

@@ -5,7 +5,7 @@ var rpx = require('./rpx')
 var assets = require('./assets')
 var draw = require('./draw')
 
-var FLY_DUR_MS = 520
+var FLY_DUR_MS = 280
 var FLY_ICON_SIZE_RPX = 128
 
 var tools = require('../utils/tools')
@@ -22,7 +22,10 @@ var ICON_ACTIVE_BY_TYPE = {
   preview: 'images/icons/preview2.png'
 }
 
-function iconPathForType(type) {
+function iconPathForType(type, screen) {
+  if (screen && screen._toolRewardFly && screen._toolRewardFly.type === type) {
+    return ICON_BY_TYPE[type]
+  }
   return tools.getRemain(type) > 0 ? ICON_ACTIVE_BY_TYPE[type] : ICON_BY_TYPE[type]
 }
 
@@ -87,7 +90,7 @@ function render(ctx, screen) {
   ctx.scale(fly.scale, fly.scale)
   ctx.translate(-fly.x, -fly.y)
 
-  var path = iconPathForType(fly.type)
+  var path = iconPathForType(fly.type, screen)
   var img = path ? assets.get(path) : null
   if (!img && path) assets.tryLoad(path)
   if (img) {

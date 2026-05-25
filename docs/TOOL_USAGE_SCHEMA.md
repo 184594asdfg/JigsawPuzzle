@@ -114,7 +114,7 @@ model JigsawUserTools {
 | 进关 | `puzzle-screen.js` → `onEnter` / `_initEngine` 再次 `fetchTools()` |
 | 登录 | `key=jigsaw` 时后端 `ensureJigsawUserTools` 无行则 INSERT 3/3/3 |
 | 有余量 | 点底部按钮 → `consume` → `_runToolEffect`（整图直接开 overlay） |
-| 无余量 | 弹窗 →「立刻获得」→ `grant(source:'ad')`（暂不接广告）→ 飞行动画 → `consume` → 生效 |
+| 无余量 | 弹窗 →「立刻获得」→ `grant` + 飞行动画落按钮（不自动使用）；用户再点底部按钮才 `consume` 生效 |
 | 角标 | 底部三按钮绘制 `getRemain` |
 | 409 | `request.js` 解析 `message`，toast「次数不足」 |
 
