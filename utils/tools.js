@@ -35,9 +35,9 @@ function fetchTools() {
   var userId = user.getUserId()
   if (!userId) {
     cached = {
-      addTimeRemain: DEFAULT_TOOLS.addTimeRemain,
-      hintRemain: DEFAULT_TOOLS.hintRemain,
-      previewRemain: DEFAULT_TOOLS.previewRemain
+      addTimeRemain: 0,
+      hintRemain: 0,
+      previewRemain: 0
     }
     return Promise.resolve(cached)
   }
@@ -59,12 +59,8 @@ function getCached() {
 }
 
 function getRemain(action) {
-  if (!cached) {
-    if (action === 'addTime') return DEFAULT_TOOLS.addTimeRemain
-    if (action === 'hint') return DEFAULT_TOOLS.hintRemain
-    if (action === 'preview') return DEFAULT_TOOLS.previewRemain
-    return 0
-  }
+  if (!user.getUserId()) return 0
+  if (!cached) return 0
   if (action === 'addTime') return cached.addTimeRemain
   if (action === 'hint') return cached.hintRemain
   if (action === 'preview') return cached.previewRemain

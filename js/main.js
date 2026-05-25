@@ -162,7 +162,10 @@ wx.onShow(function () {
   galleryData.loadThemes({ summary: true }).then(function () {
     return user.autoLogin()
   }).then(function () {
-    return progress.loadFromServer()
+    return Promise.all([
+      progress.loadFromServer(),
+      tools.fetchTools()
+    ])
   }).then(function () {
     prefetch.prefetchHomeAssets()
   }).catch(function () {})

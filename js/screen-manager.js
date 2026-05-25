@@ -1,5 +1,5 @@
 /**
- * 场景栈：last-in 顶层独占输入；render 时按从底到顶顺序绘制以支持半透明叠层。
+ * 场景栈：顶层独占输入；每帧仅对栈顶 update/render（下层 onPause 不绘制）。
  */
 function ScreenManager() {
   this.stack = []
@@ -39,11 +39,10 @@ ScreenManager.prototype.top = function () {
 }
 
 ScreenManager.prototype.render = function (dt) {
-  for (var i = 0; i < this.stack.length; i++) {
-    var s = this.stack[i]
-    if (typeof s.update === 'function') s.update(dt)
-    if (typeof s.render === 'function') s.render(this.ctx)
-  }
+  var top = this.top()
+  if (!top) return
+  if (typeof top.update === 'function') top.update(dt)
+  if (typeof top.render === 'function') top.render(this.ctx)
 }
 
 ScreenManager.prototype._dispatch = function (method, e) {

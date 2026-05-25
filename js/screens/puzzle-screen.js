@@ -97,6 +97,7 @@ function PuzzleScreen(opts) {
   this._pressAnim = null
   this._toolRewardFly = null
   this._addTimeAlarmFly = null
+  this._toolConsuming = false
   this.showPreviewOverlay = false
   this.previewSessionMs = 0
 }
@@ -134,6 +135,7 @@ PuzzleScreen.prototype._initEngine = function () {
   toolModal.clearToolEnter(this)
   this._toolRewardFly = null
   this._addTimeAlarmFly = null
+  this._toolConsuming = false
   this.showPreviewOverlay = false
   this.previewSessionMs = 0
   this.countdownEnded = false
@@ -173,7 +175,6 @@ PuzzleScreen.prototype._initEngine = function () {
   if (assets.get(src)) {
     this.loading = false
   }
-  tools.fetchTools()
   this.engine.start().then(function () {
     self.loading = false
     if (self.engine) self.engine.setSfxEnabled(settings.get('sfx'))
@@ -202,7 +203,7 @@ PuzzleScreen.prototype.update = function (dt) {
   if (
     this.engine && !this.loading && !this.engine.isInputLocked() &&
     !this.showSuccess && !this.showSettings &&
-    !this.toolModal && !this.showPreviewOverlay &&
+    !this.toolModal &&
     !this.countdownEnded && this.countdownMs > 0
   ) {
     this.countdownMs -= dt
@@ -256,11 +257,6 @@ PuzzleScreen.prototype.render = function (ctx) {
   var countdownH = rpx.rpx(COUNTDOWN_AREA_H_RPX)
   var countdownY = navY + navH + rpx.rpx(8)
   this._drawCountdown(ctx, W, countdownY, countdownH)
-
-  var board = this.engine.boardSize()
-  var bx = Math.floor((W - board.w) / 2)
-  var by = countdownY + countdownH + rpx.rpx(COUNTDOWN_GAP_RPX)
-  this.engine.setBoardPosition(bx, by)
   this.engine.render(ctx)
 
   var self = this
@@ -498,9 +494,35 @@ PuzzleScreen.prototype._onToolModalConfirm = function (type, W, H) {
 
 PuzzleScreen.prototype._consumeAndApplyTool = function (type) {
   var self = this
+  if (this._toolConsuming) return
+
+  if (type === 'hint') {
+    if (!this.engine || this.loading) return
+    if (!this.engine.applyHint()) {
+      try {
+        wx.showToast({
+          title: this.engine.solved ? '拼图已完成' : '当前无法提示',
+          icon: 'none'
+        })
+      } catch (e) {}
+      return
+    }
+    this._toolConsuming = true
+    tools.consume(type).then(function () {
+      self._toolConsuming = false
+    }).catch(function (err) {
+      self._toolConsuming = false
+      try { wx.showToast({ title: err.message || '次数同步失败', icon: 'none' }) } catch (e2) {}
+    })
+    return
+  }
+
+  this._toolConsuming = true
   tools.consume(type).then(function () {
+    self._toolConsuming = false
     self._runToolEffect(type)
   }).catch(function (err) {
+    self._toolConsuming = false
     try { wx.showToast({ title: err.message || '次数不足', icon: 'none' }) } catch (e) {}
   })
 }
@@ -527,8 +549,6 @@ PuzzleScreen.prototype._playAddTimeAlarmFly = function () {
 PuzzleScreen.prototype._runToolEffect = function (type) {
   if (type === 'addTime') {
     this._playAddTimeAlarmFly()
-  } else if (type === 'hint') {
-    this._useHint()
   } else if (type === 'preview') {
     this._startPreviewSession()
     this._openPreviewOverlay()
@@ -594,20 +614,6 @@ PuzzleScreen.prototype._addCountdownTime = function () {
   this.countdownMs += COUNTDOWN_ADD_MS
   this.countdownTotalMs += COUNTDOWN_ADD_MS
   this.countdownEnded = false
-}
-
-PuzzleScreen.prototype._useHint = function () {
-  if (!this.engine || this.loading) return
-  if (this.engine.isInputLocked()) return
-  var ok = this.engine.applyHint()
-  if (!ok) {
-    try {
-      wx.showToast({
-        title: this.engine.solved ? '拼图已完成' : '当前无法提示',
-        icon: 'none'
-      })
-    } catch (e) {}
-  }
 }
 
 PuzzleScreen.prototype._drawPrimaryButton = function (ctx, x, y, w, h, label) {
