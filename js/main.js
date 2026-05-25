@@ -9,6 +9,7 @@ var settings = require('../utils/settings')
 var user = require('../utils/user')
 var galleryData = require('../utils/gallery-data')
 var progress = require('../utils/progress')
+var tools = require('../utils/tools')
 var prefetch = require('../utils/prefetch')
 var loadingScreen = require('./screens/loading-screen')
 var settingsModal = require('./settings-modal')
@@ -101,7 +102,10 @@ function bootstrapData() {
   return Promise.all([themesPromise, loginPromise]).then(function () {
     splash.hint = '正在同步进度...'
     splash.progress = Math.max(splash.progress, 0.78)
-    return progress.loadFromServer()
+    return Promise.all([
+      progress.loadFromServer(),
+      tools.fetchTools()
+    ])
   }).then(function () {
     splash.hint = '正在加载主题封面...'
     splash.progress = Math.max(splash.progress, 0.86)

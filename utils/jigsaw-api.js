@@ -36,9 +36,40 @@ function saveProgress(userId, levelKey) {
   return request.post(config.api.progress, { userId: userId, levelKey: levelKey })
 }
 
+function fetchTools(userId) {
+  if (!userId) {
+    return Promise.resolve({
+      addTimeRemain: 3,
+      hintRemain: 3,
+      previewRemain: 3
+    })
+  }
+  return request.get(config.api.tools, { userId: userId })
+}
+
+function grantTool(userId, toolType, source) {
+  if (!userId || !toolType) return Promise.resolve(null)
+  return request.post(config.api.tools + '/grant', {
+    userId: userId,
+    toolType: toolType,
+    source: source || 'ad'
+  })
+}
+
+function consumeTool(userId, toolType) {
+  if (!userId || !toolType) return Promise.resolve(null)
+  return request.post(config.api.tools + '/consume', {
+    userId: userId,
+    toolType: toolType
+  })
+}
+
 module.exports = {
   fetchThemes: fetchThemes,
   fetchThemeDetail: fetchThemeDetail,
   fetchProgress: fetchProgress,
-  saveProgress: saveProgress
+  saveProgress: saveProgress,
+  fetchTools: fetchTools,
+  grantTool: grantTool,
+  consumeTool: consumeTool
 }

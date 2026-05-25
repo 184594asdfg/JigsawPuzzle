@@ -27,7 +27,9 @@ function request(method, path, data) {
       header: { 'Content-Type': 'application/json' },
       success: function (res) {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          reject(new Error('HTTP ' + res.statusCode))
+          var body = res.data
+          var msg = (body && body.message) ? body.message : ('HTTP ' + res.statusCode)
+          reject(new Error(msg))
           return
         }
         try {

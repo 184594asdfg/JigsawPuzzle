@@ -37,7 +37,7 @@ var MODAL_CONFIG = {
   },
   preview: {
     image: 'images/modals/preview_modal.png',
-    confirm: false
+    confirm: true
   }
 }
 
@@ -160,6 +160,7 @@ module.exports = {
   SRC_H: SRC_H,
   preload: preload,
   getConfig: getConfig,
+  computeModalRect: computeModalRect,
   drawModal: drawModal,
   beginToolEnter: beginToolEnter,
   clearToolEnter: clearToolEnter,

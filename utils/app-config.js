@@ -25,6 +25,7 @@ module.exports = {
   api: {
     login: '/user/wxMiniLoginByCode',
     themes: '/jigsaw/themes',
-    progress: '/jigsaw/progress'
+    progress: '/jigsaw/progress',
+    tools: '/jigsaw/tools'
   }
 }

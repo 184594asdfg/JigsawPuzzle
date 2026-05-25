@@ -11,6 +11,9 @@ var progress = require('../../utils/progress')
 var settings = require('../../utils/settings')
 var settingsModal = require('../settings-modal')
 var toolModal = require('../puzzle-tool-modal')
+var toolRewardFly = require('../tool-reward-fly')
+var addTimeAlarmFly = require('../add-time-alarm-fly')
+var tools = require('../../utils/tools')
 var pressAnim = require('../press-anim')
 var sfx = require('../sfx')
 
@@ -35,10 +38,15 @@ var BOTTOM_TOOL_H_RPX = 138
 var BOTTOM_TOOL_GAP_RPX = 96
 var BOTTOM_TOOL_BOTTOM_RPX = 48
 var BOTTOM_TOOLS = [
-  { action: 'addTime', path: 'images/icons/add_time.png' },
-  { action: 'hint', path: 'images/icons/hint.png' },
-  { action: 'preview', path: 'images/icons/preview.png' }
+  { action: 'addTime', path: 'images/icons/add_time.png', pathActive: 'images/icons/add_time2.png' },
+  { action: 'hint', path: 'images/icons/hint.png', pathActive: 'images/icons/hint2.png' },
+  { action: 'preview', path: 'images/icons/preview.png', pathActive: 'images/icons/preview2.png' }
 ]
+
+function bottomToolIconPath(tool) {
+  var remain = tools.getRemain(tool.action)
+  return remain > 0 ? tool.pathActive : tool.path
+}
 
 function formatCountdown(ms) {
   var sec = Math.max(0, Math.ceil(ms / 1000))
@@ -69,6 +77,9 @@ function PuzzleScreen(opts) {
   this.countdownEnded = false
   this.loadError = ''
   this._pressAnim = null
+  this._toolRewardFly = null
+  this._addTimeAlarmFly = null
+  this.showPreviewOverlay = false
 }
 PuzzleScreen.prototype = Object.create(BaseScreen.prototype)
 PuzzleScreen.prototype.constructor = PuzzleScreen
@@ -80,6 +91,7 @@ PuzzleScreen.prototype.onEnter = function (manager) {
   assets.load(COUNTDOWN_ALARM_IMAGE)
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
     assets.load(BOTTOM_TOOLS[i].path)
+    assets.load(BOTTOM_TOOLS[i].pathActive)
   }
   this._initEngine()
 }
@@ -100,7 +112,11 @@ PuzzleScreen.prototype._initEngine = function () {
   settingsModal.clearSettingsEnter(this)
   this.toolModal = null
   toolModal.clearToolEnter(this)
+  this._toolRewardFly = null
+  this._addTimeAlarmFly = null
+  this.showPreviewOverlay = false
   this.countdownEnded = false
+  tools.fetchTools()
   var limitMs = this.timeLimitSec > 0 ? this.timeLimitSec * 1000 : COUNTDOWN_DURATION_MS
   this.countdownTotalMs = limitMs
   this.countdownMs = limitMs
@@ -136,6 +152,7 @@ PuzzleScreen.prototype._initEngine = function () {
   if (assets.get(src)) {
     this.loading = false
   }
+  tools.fetchTools()
   this.engine.start().then(function () {
     self.loading = false
     if (self.engine) self.engine.setSfxEnabled(settings.get('sfx'))
@@ -155,6 +172,8 @@ PuzzleScreen.prototype.update = function (dt) {
   if (this.engine) this.engine.update(dt)
   if (this.showSettings) settingsModal.tickSettingsEnter(this, dt)
   if (this.toolModal) toolModal.tickToolEnter(this, dt)
+  toolRewardFly.tick(this)
+  addTimeAlarmFly.tick(this)
   if (
     this.engine && !this.loading && !this.engine.isInputLocked() &&
     !this.showSuccess && !this.showSettings &&
@@ -220,6 +239,12 @@ PuzzleScreen.prototype.render = function (ctx) {
 
   var self = this
   this._drawBottomTools(ctx, W, H)
+  toolRewardFly.render(ctx, this)
+  addTimeAlarmFly.render(ctx, this)
+
+  if (this.showPreviewOverlay) {
+    this._drawPreviewOverlay(ctx, W, H)
+  }
 
   if (this.showSuccess) {
     this._drawSuccess(ctx, W, H)
@@ -253,9 +278,29 @@ PuzzleScreen.prototype._drawNav = function (ctx, y, h, W) {
   this._navRect = { x: 0, y: y, w: W, h: h }
 }
 
-PuzzleScreen.prototype._drawCountdown = function (ctx, W, y, h) {
+PuzzleScreen.prototype._getCountdownLayout = function (W) {
+  var navY = rpx.safeTop()
+  var navH = rpx.rpx(88)
+  var h = rpx.rpx(COUNTDOWN_AREA_H_RPX)
+  var y = navY + navH + rpx.rpx(8)
   var w = Math.min(W, rpx.rpx(COUNTDOWN_WIDTH_RPX))
   var x = (W - w) / 2
+  var alarmW = rpx.rpx(COUNTDOWN_ALARM_W_RPX)
+  var alarmH = rpx.rpx(COUNTDOWN_ALARM_H_RPX)
+  var alarmX = x + rpx.rpx(COUNTDOWN_ALARM_LEFT_RPX)
+  var alarmY = y + (h - alarmH) / 2
+  return {
+    x: x, y: y, w: w, h: h,
+    alarmX: alarmX, alarmY: alarmY, alarmW: alarmW, alarmH: alarmH,
+    alarmCx: alarmX + alarmW / 2,
+    alarmCy: alarmY + alarmH / 2
+  }
+}
+
+PuzzleScreen.prototype._drawCountdown = function (ctx, W, y, h) {
+  var layout = this._getCountdownLayout(W)
+  var x = layout.x
+  var w = layout.w
   var radius = h / 2
   var ratio = this.countdownTotalMs > 0 ? this.countdownMs / this.countdownTotalMs : 0
 
@@ -265,44 +310,74 @@ PuzzleScreen.prototype._drawCountdown = function (ctx, W, y, h) {
   var timeColor = this.countdownEnded ? '#ffb4b4' : (ratio < 0.2 ? '#ffe0a8' : '#ffffff')
   var timeX = x + w / 2 + rpx.rpx(COUNTDOWN_TIME_OFFSET_X_RPX)
 
-  var alarmW = rpx.rpx(COUNTDOWN_ALARM_W_RPX)
-  var alarmH = rpx.rpx(COUNTDOWN_ALARM_H_RPX)
-  var alarmX = x + rpx.rpx(COUNTDOWN_ALARM_LEFT_RPX)
-  var alarmY = y + (h - alarmH) / 2
   var alarmImg = assets.get(COUNTDOWN_ALARM_IMAGE)
   if (!alarmImg) assets.load(COUNTDOWN_ALARM_IMAGE)
   if (alarmImg) {
-    ctx.drawImage(alarmImg, alarmX, alarmY, alarmW, alarmH)
+    ctx.drawImage(
+      alarmImg, layout.alarmX, layout.alarmY, layout.alarmW, layout.alarmH
+    )
   }
 
   draw.fillTextCentered(ctx, formatCountdown(this.countdownMs), timeX, y + h / 2, timeFont, timeColor)
 }
 
-PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
+PuzzleScreen.prototype._getBottomToolLayout = function (W, H) {
   var toolW = rpx.rpx(BOTTOM_TOOL_W_RPX)
   var toolH = rpx.rpx(BOTTOM_TOOL_H_RPX)
   var gap = rpx.rpx(BOTTOM_TOOL_GAP_RPX)
   var totalW = BOTTOM_TOOLS.length * toolW + (BOTTOM_TOOLS.length - 1) * gap
   var startX = (W - totalW) / 2
   var y = H - rpx.safeBottom() - rpx.rpx(BOTTOM_TOOL_BOTTOM_RPX) - toolH
+  var map = {}
+  for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
+    var x = startX + i * (toolW + gap)
+    map[BOTTOM_TOOLS[i].action] = {
+      x: x,
+      y: y,
+      w: toolW,
+      h: toolH,
+      cx: x + toolW / 2,
+      cy: y + toolH / 2
+    }
+  }
+  return map
+}
+
+PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
+  var layout = this._getBottomToolLayout(W, H)
   var self = this
   var anim = this._pressAnim
   var blockHits = !!anim || this.showSuccess || this.showSettings || this.toolModal ||
+    this.showPreviewOverlay || toolRewardFly.isActive(this) ||
+    addTimeAlarmFly.isActive(this) ||
     (this.engine && this.engine.isInputLocked())
 
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
     var tool = BOTTOM_TOOLS[i]
-    var x = startX + i * (toolW + gap)
-    var cx = x + toolW / 2
-    var cy = y + toolH / 2
+    var slot = layout[tool.action]
+    var x = slot.x
+    var y = slot.y
+    var toolW = slot.w
+    var toolH = slot.h
+
     var scale = pressAnim.btnScale(anim, tool.action)
     ;(function (t, px, py, sc) {
+      var iconPath = bottomToolIconPath(t)
       pressAnim.drawWithPressScale(ctx, px + toolW / 2, py + toolH / 2, sc, function () {
-        var img = assets.get(t.path)
-        if (!img) assets.load(t.path)
+        var img = assets.get(iconPath)
+        if (!img) assets.load(iconPath)
         if (img) ctx.drawImage(img, px, py, toolW, toolH)
       })
     })(tool, x, y, scale)
+
+    var remain = tools.getRemain(tool.action)
+    if (remain > 0) {
+      var badgeFont = '700 ' + rpx.rpx(27).toFixed(0) + 'px sans-serif'
+      draw.fillTextCentered(
+        ctx, String(remain), x + toolW - rpx.rpx(20), y + rpx.rpx(20),
+        badgeFont, '#ffffff'
+      )
+    }
 
     if (!blockHits) {
       var rect = { x: x, y: y, w: toolW, h: toolH }
@@ -315,7 +390,12 @@ PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
 
 PuzzleScreen.prototype._onBottomTool = function (action) {
   if (this.showSuccess || this.showSettings || this.toolModal) return
+  if (toolRewardFly.isActive(this) || addTimeAlarmFly.isActive(this)) return
   if (this.engine && this.engine.isInputLocked()) return
+  if (tools.getRemain(action) > 0) {
+    this._consumeAndApplyTool(action)
+    return
+  }
   if (action === 'addTime' || action === 'hint' || action === 'preview') {
     this.toolModal = action
     toolModal.beginToolEnter(this)
@@ -332,12 +412,120 @@ PuzzleScreen.prototype._drawToolModal = function (ctx, W, H) {
   var type = this.toolModal
   toolModal.drawModal(this, ctx, W, H, type, {
     onClose: function () { self._closeToolModal() },
-    onConfirm: function () {
-      if (type === 'addTime') self._addCountdownTime()
-      else if (type === 'hint') self._useHint()
-      self._closeToolModal()
-    }
+    onConfirm: function () { self._onToolModalConfirm(type, W, H) }
   })
+}
+
+/** 立刻获得：暂不接广告，先 grant（次数为 0 时）再飞图标，落地后 consume */
+PuzzleScreen.prototype._onToolModalConfirm = function (type, W, H) {
+  var self = this
+  var layout = this._getBottomToolLayout(W, H)
+  var target = layout[type]
+  var needGrant = tools.getRemain(type) <= 0
+
+  var runFlyThenConsume = function () {
+    if (!target) {
+      self._consumeAndApplyTool(type)
+      return
+    }
+    var modalRect = toolModal.computeModalRect(W, H)
+    toolRewardFly.start(self, {
+      type: type,
+      fromX: modalRect.x + modalRect.w / 2,
+      fromY: modalRect.y + modalRect.h / 2,
+      toX: target.cx,
+      toY: target.cy,
+      onDone: function () { self._consumeAndApplyTool(type) }
+    })
+  }
+
+  this._closeToolModal()
+  if (needGrant) {
+    tools.grant(type, 'ad').then(runFlyThenConsume).catch(function (err) {
+      try { wx.showToast({ title: err.message || '发放失败', icon: 'none' }) } catch (e) {}
+    })
+  } else {
+    runFlyThenConsume()
+  }
+}
+
+PuzzleScreen.prototype._consumeAndApplyTool = function (type) {
+  var self = this
+  tools.consume(type).then(function () {
+    self._runToolEffect(type)
+  }).catch(function (err) {
+    try { wx.showToast({ title: err.message || '次数不足', icon: 'none' }) } catch (e) {}
+  })
+}
+
+PuzzleScreen.prototype._playAddTimeAlarmFly = function () {
+  var W = rpx.windowWidth()
+  var H = rpx.windowHeight()
+  var from = this._getBottomToolLayout(W, H).addTime
+  var cd = this._getCountdownLayout(W)
+  if (!from) {
+    this._addCountdownTime()
+    return
+  }
+  var self = this
+  addTimeAlarmFly.start(this, {
+    fromX: from.cx,
+    fromY: from.cy,
+    toX: cd.alarmCx,
+    toY: cd.alarmCy,
+    onDone: function () { self._addCountdownTime() }
+  })
+}
+
+PuzzleScreen.prototype._runToolEffect = function (type) {
+  if (type === 'addTime') {
+    this._playAddTimeAlarmFly()
+  } else if (type === 'hint') {
+    this._useHint()
+  } else if (type === 'preview') {
+    this.showPreviewOverlay = true
+  }
+}
+
+PuzzleScreen.prototype._drawPreviewOverlay = function (ctx, W, H) {
+  var self = this
+  this.resetHitZones()
+  ctx.fillStyle = 'rgba(0,0,0,0.72)'
+  ctx.fillRect(0, 0, W, H)
+  this.addHitZone({ x: 0, y: 0, w: W, h: H }, function () {
+    self.showPreviewOverlay = false
+  })
+
+  var pad = rpx.rpx(40)
+  var top = rpx.safeTop() + rpx.rpx(100)
+  var bottom = H - rpx.safeBottom() - rpx.rpx(200)
+  var maxW = W - pad * 2
+  var maxH = bottom - top
+  if (maxH < rpx.rpx(200)) maxH = H * 0.55
+
+  var img = this.engine && this.engine.image
+  if (img && img.width && img.height) {
+    var ratio = img.width / img.height
+    var drawW = maxW
+    var drawH = drawW / ratio
+    if (drawH > maxH) {
+      drawH = maxH
+      drawW = drawH * ratio
+    }
+    var ix = (W - drawW) / 2
+    var iy = top + (maxH - drawH) / 2
+    draw.roundedRectPath(ctx, ix, iy, drawW, drawH, rpx.rpx(12))
+    ctx.save()
+    ctx.clip()
+    ctx.drawImage(img, ix, iy, drawW, drawH)
+    ctx.restore()
+    draw.strokeRoundedRect(ctx, ix, iy, drawW, drawH, rpx.rpx(12), 'rgba(255,255,255,0.25)', 2)
+  }
+
+  draw.fillTextCentered(
+    ctx, '点击任意处关闭', W / 2, H - rpx.safeBottom() - rpx.rpx(72),
+    '400 ' + rpx.rpx(24).toFixed(0) + 'px sans-serif', 'rgba(255,255,255,0.75)'
+  )
 }
 
 PuzzleScreen.prototype._addCountdownTime = function () {
@@ -401,6 +589,8 @@ PuzzleScreen.prototype._startPressAnim = function (id) {
   if (this._pressAnim) return
   if (this.loading || !this.engine || this.loadError) return
   if (this.showSuccess || this.showSettings || this.toolModal) return
+  if (this.showPreviewOverlay || toolRewardFly.isActive(this) ||
+    addTimeAlarmFly.isActive(this)) return
   if (this.engine && this.engine.isInputLocked()) return
   sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
@@ -454,7 +644,9 @@ PuzzleScreen.prototype._drawSuccess = function (ctx, W, H) {
 
 PuzzleScreen.prototype._isOnEngine = function (x, y) {
   if (!this.engine || this.loading || this.engine.isInputLocked() ||
-    this.showSuccess || this.showSettings || this.toolModal) return false
+    this.showSuccess || this.showSettings || this.toolModal ||
+    this.showPreviewOverlay || toolRewardFly.isActive(this) ||
+    addTimeAlarmFly.isActive(this)) return false
   var board = this.engine.boardSize()
   var bx = this.engine.boardX
   var by = this.engine.boardY
