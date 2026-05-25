@@ -10,6 +10,7 @@ var rankData = require('../../utils/rank-data')
 var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
 var prefetch = require('../../utils/prefetch')
+var pressAnim = require('../press-anim')
 
 var HOME_BG = 'images/home-bg.jpg'
 var HOME_HERO = 'images/home-hero.png'
@@ -173,6 +174,7 @@ function HomeScreen() {
   this.rankScrollY = 0
   this._rankDrag = null
   this._sideButtonRects = {}
+  this._pressAnim = null
 }
 HomeScreen.prototype = Object.create(BaseScreen.prototype)
 HomeScreen.prototype.constructor = HomeScreen
@@ -190,6 +192,22 @@ HomeScreen.prototype.onResume = function () {
   progress.loadFromServer().then(function () {
     prefetch.prefetchNextLevelAssets()
   })
+}
+
+// ---------------------------------------------------------------------------
+//  更新
+// ---------------------------------------------------------------------------
+
+HomeScreen.prototype.update = function (dt) {
+  if (this.showSettings) settingsModal.tickSettingsEnter(this, dt)
+  var tick = pressAnim.tickPressAnim(this._pressAnim, dt)
+  this._pressAnim = tick.anim
+  if (!tick.completed) return
+  var id = tick.id
+  if (id === 'settings') this._openSettings()
+  else if (id === 'rank') this._openRank()
+  else if (id === 'gallery') this._openGallery()
+  else if (id === 'main') this._startPuzzle()
 }
 
 // ---------------------------------------------------------------------------
@@ -263,13 +281,16 @@ HomeScreen.prototype.render = function (ctx) {
     this._drawSettingsModal(ctx, W, H)
   }
 
-  // 设置图标始终显示（叠在弹窗遮罩之上）
+  // 设置图标（按压动效结束后再弹窗）
   var self = this
-  settingsModal.drawNavIcon(ctx, layout.nav.y, layout.nav.h)
-  if (!this.showSettings) {
+  var anim = this._pressAnim
+  settingsModal.drawNavIcon(
+    ctx, layout.nav.y, layout.nav.h, pressAnim.btnScale(anim, 'settings')
+  )
+  if (!this.showSettings && !anim) {
     this.addHitZone(settingsModal.navHitRect(layout.nav.y, layout.nav.h, true), function () {
       self.showRank = false
-      self._openSettings()
+      self._startPressAnim('settings')
     })
   }
 }
@@ -382,40 +403,61 @@ HomeScreen.prototype._drawBottomBar = function (ctx, layout) {
   var rank = layout.bottomBar.rankBtn
   var gallery = layout.bottomBar.galleryBtn
   var self = this
+  var anim = this._pressAnim
+  var blockHits = !!anim || this.showRank || this.showSettings
 
-  this._drawSideIcon(ctx, ICON_RANK, rank.cx, rank.cy, rank.w, rank.h)
-  this._sideButtonRects.rank = rank
-  this.addHitZone(rank, function () { self._openRank() })
-
-  this._drawSideIcon(ctx, ICON_GALLERY, gallery.cx, gallery.cy, gallery.w, gallery.h)
-  this._sideButtonRects.gallery = gallery
-  this.addHitZone(gallery, function () { self._openGallery() })
-
-  var icon = assets.get(ICON_LEVEL)
-  if (icon) {
-    ctx.drawImage(icon, main.x, main.y, main.w, main.h)
-  }
-  var nextLevelNum = progress.countAllCompleted(galleryData.getThemes()) + 1
-  ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.45)'
-  ctx.shadowBlur = rpx.rpx(8)
-  ctx.shadowOffsetY = rpx.rpx(2)
-  draw.fillTextCentered(
-    ctx, '关卡' + nextLevelNum, main.cx, main.cy,
-    '700 ' + rpx.rpx(56).toFixed(0) + 'px sans-serif', '#ffffff'
+  this._drawSideIcon(
+    ctx, ICON_RANK, rank.cx, rank.cy, rank.w, rank.h, pressAnim.btnScale(anim, 'rank')
   )
-  ctx.restore()
-  this.addHitZone(main, function () { self._startPuzzle() })
+  this._sideButtonRects.rank = rank
+  if (!blockHits) {
+    this.addHitZone(rank, function () { self._startPressAnim('rank') })
+  }
+
+  this._drawSideIcon(
+    ctx, ICON_GALLERY, gallery.cx, gallery.cy, gallery.w, gallery.h,
+    pressAnim.btnScale(anim, 'gallery')
+  )
+  this._sideButtonRects.gallery = gallery
+  if (!blockHits) {
+    this.addHitZone(gallery, function () { self._startPressAnim('gallery') })
+  }
+
+  var mainScale = pressAnim.btnScale(anim, 'main')
+  var nextLevelNum = progress.countAllCompleted(galleryData.getThemes()) + 1
+  pressAnim.drawWithPressScale(ctx, main.cx, main.cy, mainScale, function () {
+    var icon = assets.get(ICON_LEVEL)
+    if (icon) {
+      ctx.drawImage(icon, main.x, main.y, main.w, main.h)
+    }
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.45)'
+    ctx.shadowBlur = rpx.rpx(8)
+    ctx.shadowOffsetY = rpx.rpx(2)
+    draw.fillTextCentered(
+      ctx, '关卡' + nextLevelNum, main.cx, main.cy,
+      '700 ' + rpx.rpx(56).toFixed(0) + 'px sans-serif', '#ffffff'
+    )
+    ctx.restore()
+  })
+  if (!blockHits) {
+    this.addHitZone(main, function () { self._startPressAnim('main') })
+  }
 }
 
-HomeScreen.prototype._drawSideIcon = function (ctx, src, cx, cy, w, h) {
-  var img = assets.get(src)
-  if (img) {
-    ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h)
-  } else {
-    ctx.fillStyle = 'rgba(255,255,255,0.18)'
-    draw.fillRoundedRect(ctx, cx - w / 2, cy - h / 2, w, h, Math.min(w, h) * 0.2, 'rgba(255,255,255,0.18)')
-  }
+HomeScreen.prototype._drawSideIcon = function (ctx, src, cx, cy, w, h, scale) {
+  scale = scale == null ? 1 : scale
+  pressAnim.drawWithPressScale(ctx, cx, cy, scale, function () {
+    var img = assets.get(src)
+    if (img) {
+      ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h)
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.18)'
+      draw.fillRoundedRect(
+        ctx, cx - w / 2, cy - h / 2, w, h, Math.min(w, h) * 0.2, 'rgba(255,255,255,0.18)'
+      )
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -697,7 +739,7 @@ HomeScreen.prototype.onTouchEnd = function (e) {
   if (this._pendingSettingsOpen) {
     this._pendingSettingsOpen = false
     this.showRank = false
-    this._openSettings()
+    this._startPressAnim('settings')
     return
   }
 
@@ -714,11 +756,19 @@ HomeScreen.prototype.onTouchEnd = function (e) {
 HomeScreen.prototype.onTouchCancel = function () {
   this._rankDrag = null
   this._pendingSettingsOpen = false
+  this._pressAnim = null
 }
 
 // ---------------------------------------------------------------------------
 //  动作
 // ---------------------------------------------------------------------------
+
+HomeScreen.prototype._startPressAnim = function (id) {
+  if (this._pressAnim) return
+  if (id === 'settings' && this.showSettings) return
+  if (id !== 'settings' && (this.showRank || this.showSettings)) return
+  this._pressAnim = { id: id, time: 0 }
+}
 
 HomeScreen.prototype._openRank = function () {
   this.showRank = true
@@ -729,11 +779,13 @@ HomeScreen.prototype._closeRank = function () {
 }
 HomeScreen.prototype._openSettings = function () {
   this.showSettings = true
+  settingsModal.beginSettingsEnter(this)
   this._settingsCloseLockUntil = Date.now() + 400
 }
 HomeScreen.prototype._closeSettings = function () {
   if (this._settingsCloseLockUntil && Date.now() < this._settingsCloseLockUntil) return
   this.showSettings = false
+  settingsModal.clearSettingsEnter(this)
   this._settingsCloseLockUntil = 0
 }
 HomeScreen.prototype._drawSettingsModal = function (ctx, W, H) {

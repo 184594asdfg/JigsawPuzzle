@@ -11,6 +11,7 @@ var assets = require('../assets')
 var draw = require('../draw')
 var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
+var pressAnim = require('../press-anim')
 
 var BG = '#2e76ce'
 var TEXT_HEADER = '#ffffff'
@@ -34,6 +35,7 @@ function GalleryScreen() {
   this._scrollMax = 0
   this._drag = null
   this._themeRowsHeight = 0
+  this._pressAnim = null
 }
 GalleryScreen.prototype = Object.create(BaseScreen.prototype)
 GalleryScreen.prototype.constructor = GalleryScreen
@@ -146,6 +148,9 @@ GalleryScreen.prototype.update = function (dt) {
       this._pulseTime = 0
     }
   }
+  var tick = pressAnim.tickPressAnim(this._pressAnim, dt)
+  this._pressAnim = tick.anim
+  if (tick.completed && tick.id === 'back') this._onBack()
 }
 
 GalleryScreen.prototype.render = function (ctx) {
@@ -206,16 +211,19 @@ GalleryScreen.prototype.render = function (ctx) {
   }
 }
 
-GalleryScreen.prototype._drawNavBack = function (ctx, y, h) {
+GalleryScreen.prototype._drawNavBack = function (ctx, y, h, scale) {
+  scale = scale == null ? 1 : scale
   var size = rpx.rpx(NAV_BACK_SIZE_RPX)
   var cx = rpx.rpx(NAV_BACK_LEFT_RPX) + size / 2
   var cy = y + h / 2
   var x = cx - size / 2
   var iconY = cy - size / 2
 
-  var icon = assets.get(NAV_BACK_ICON)
-  if (!icon) assets.load(NAV_BACK_ICON)
-  if (icon) ctx.drawImage(icon, x, iconY, size, size)
+  pressAnim.drawWithPressScale(ctx, cx, cy, scale, function () {
+    var icon = assets.get(NAV_BACK_ICON)
+    if (!icon) assets.load(NAV_BACK_ICON)
+    if (icon) ctx.drawImage(icon, x, iconY, size, size)
+  })
 
   var pad = rpx.rpx(8)
   return { x: x - pad, y: iconY - pad, w: size + pad * 2, h: size + pad * 2 }
@@ -226,8 +234,11 @@ GalleryScreen.prototype._drawNav = function (ctx, x, y, w, h) {
   ctx.fillRect(x, y, w, h)
 
   var self = this
-  var backRect = this._drawNavBack(ctx, y, h)
-  this.addHitZone(backRect, function () { self._onBack() })
+  var anim = this._pressAnim
+  var backRect = this._drawNavBack(ctx, y, h, pressAnim.btnScale(anim, 'back'))
+  if (!anim && !this.showFullscreen) {
+    this.addHitZone(backRect, function () { self._startPressAnim('back') })
+  }
 
   var title = this.selectedTheme && this.currentTheme ? this.currentTheme.name : '图集'
   var fontSize = this.selectedTheme ? rpx.rpx(32) : rpx.rpx(34)
@@ -467,11 +478,17 @@ GalleryScreen.prototype.onTouchEnd = function (e) {
 
 GalleryScreen.prototype.onTouchCancel = function () {
   this._drag = null
+  this._pressAnim = null
 }
 
 // ---------------------------------------------------------------------------
 //  动作
 // ---------------------------------------------------------------------------
+
+GalleryScreen.prototype._startPressAnim = function (id) {
+  if (this._pressAnim || this.showFullscreen) return
+  this._pressAnim = { id: id, time: 0 }
+}
 
 GalleryScreen.prototype._onBack = function () {
   if (this.showFullscreen) {

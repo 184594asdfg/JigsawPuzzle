@@ -1,5 +1,5 @@
 /**
- * 小游戏入口
+ * 小游戏入口：开场加载页 → 资源就绪 → 直接进入首页
  */
 var rpx = require('./rpx')
 var assets = require('./assets')
@@ -10,6 +10,8 @@ var user = require('../utils/user')
 var galleryData = require('../utils/gallery-data')
 var progress = require('../utils/progress')
 var prefetch = require('../utils/prefetch')
+var loadingScreen = require('./screens/loading-screen')
+var settingsModal = require('./settings-modal')
 
 var canvas = wx.createCanvas()
 var ctx = canvas.getContext('2d')
@@ -41,28 +43,28 @@ var CORE_ASSETS = [
   'images/icons/rank.png',
   'images/icons/level.png',
   'images/icons/gallery.png',
+  'images/icons/setting.png',
   'images/themes/theme-unlocked.png',
   'images/themes/theme-locked.png',
   'images/themes/level-placeholder.png',
   'images/merge_fx.png'
 ]
 
-var appReady = false
-var loadingProgress = 0
-var loadingHint = '加载资源...'
+/** splash.phase: loading | done */
+var splash = {
+  phase: 'loading',
+  progress: 0,
+  hint: '正在加载资源...',
+  spinner: 0,
+  loadDone: false
+}
 
-function drawLoadingScreen() {
-  ctx.fillStyle = '#5b6fd8'
-  ctx.fillRect(0, 0, W, H)
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.font = rpx.rpx(48).toFixed(0) + 'px sans-serif'
-  ctx.fillStyle = '#ffffff'
-  ctx.fillText('吉吉拼图', W / 2, H / 2 - rpx.rpx(48))
-  ctx.font = rpx.rpx(26).toFixed(0) + 'px sans-serif'
-  ctx.fillStyle = 'rgba(255,255,255,0.9)'
-  ctx.fillText(loadingHint, W / 2, H / 2 + rpx.rpx(8))
-  ctx.fillText(Math.floor(loadingProgress * 100) + '%', W / 2, H / 2 + rpx.rpx(48))
+var SPLASH_MIN_MS = 500
+var SPLASH_DONE_HOLD_MS = 280
+var splashShownAt = Date.now()
+
+function canInteract() {
+  return splash.phase === 'done'
 }
 
 function preloadAssets() {
@@ -71,13 +73,14 @@ function preloadAssets() {
     var done = 0
     function step(i) {
       if (i >= total) {
-        loadingProgress = Math.max(loadingProgress, 0.35)
+        splash.progress = Math.max(splash.progress, 0.38)
         resolve()
         return
       }
       assets.load(CORE_ASSETS[i]).catch(function () {}).then(function () {
         done++
-        loadingProgress = (done / total) * 0.35
+        splash.progress = (done / total) * 0.38
+        splash.hint = '正在加载资源...'
         step(i + 1)
       })
     }
@@ -86,32 +89,55 @@ function preloadAssets() {
 }
 
 function bootstrapData() {
-  loadingHint = '加载关卡...'
-  loadingProgress = 0.45
+  splash.hint = '正在加载关卡...'
+  splash.progress = Math.max(splash.progress, 0.42)
+
+  settingsModal.preload()
 
   var themesPromise = galleryData.loadThemes({ summary: true })
   var loginPromise = user.autoLogin()
 
   return Promise.all([themesPromise, loginPromise]).then(function () {
-    loadingHint = '同步进度...'
-    loadingProgress = 0.85
+    splash.hint = '正在同步进度...'
+    splash.progress = Math.max(splash.progress, 0.78)
     return progress.loadFromServer()
   }).then(function () {
+    splash.progress = Math.max(splash.progress, 0.92)
     prefetch.prefetchNextLevelAssets()
   }).catch(function (err) {
     console.warn('[main] bootstrap failed', err)
-    loadingHint = '部分数据加载失败'
+    splash.hint = '部分数据加载失败，即将进入'
     return progress.loadFromServer().catch(function () {})
   })
 }
 
-wx.onTouchStart(function (e) { if (appReady) screenManager.onTouchStart(e) })
-wx.onTouchMove(function (e) { if (appReady) screenManager.onTouchMove(e) })
-wx.onTouchEnd(function (e) { if (appReady) screenManager.onTouchEnd(e) })
-wx.onTouchCancel(function (e) { if (appReady) screenManager.onTouchCancel(e) })
+function enterHome() {
+  splash.phase = 'done'
+  splash.progress = 1
+  splash.hint = '加载完成'
+  var HomeScreen = require('./screens/home-screen')
+  screenManager.push(new HomeScreen())
+  bgm.start()
+}
+
+function scheduleEnterHome() {
+  var elapsed = Date.now() - splashShownAt
+  var minWait = Math.max(0, SPLASH_MIN_MS - elapsed)
+  setTimeout(function () {
+    if (splash.phase !== 'loading' || !splash.loadDone) return
+    splash.progress = 1
+    splash.hint = '加载完成'
+    setTimeout(enterHome, SPLASH_DONE_HOLD_MS)
+  }, minWait)
+}
+
+wx.onTouchStart(function (e) { if (canInteract()) screenManager.onTouchStart(e) })
+wx.onTouchMove(function (e) { if (canInteract()) screenManager.onTouchMove(e) })
+wx.onTouchEnd(function (e) { if (canInteract()) screenManager.onTouchEnd(e) })
+wx.onTouchCancel(function (e) { if (canInteract()) screenManager.onTouchCancel(e) })
 
 wx.onShow(function () {
-  if (!appReady) return
+  if (!canInteract()) return
   bgm.sync()
   galleryData.loadThemes({ summary: true }).then(function () {
     return user.autoLogin()
@@ -129,11 +155,14 @@ function loop(ts) {
   var dt = lastTs ? Math.min(64, now - lastTs) : 16
   lastTs = now
   ctx.clearRect(0, 0, W, H)
-  if (!appReady) {
-    drawLoadingScreen()
+
+  if (splash.phase === 'loading') {
+    loadingScreen.update(splash, dt)
+    loadingScreen.render(ctx, splash, 1)
   } else {
     screenManager.render(dt)
   }
+
   requestAnimationFrame(loop)
 }
 
@@ -145,15 +174,11 @@ Promise.all([
   preloadAssets(),
   bootstrapData()
 ]).then(function () {
-  loadingProgress = 1
-  loadingHint = '完成'
-  appReady = true
-  bgm.start()
-  var HomeScreen = require('./screens/home-screen')
-  screenManager.push(new HomeScreen())
+  splash.loadDone = true
+  scheduleEnterHome()
 }).catch(function (err) {
   console.error('[main] startup failed', err)
-  appReady = true
-  var HomeScreen = require('./screens/home-screen')
-  screenManager.push(new HomeScreen())
+  splash.loadDone = true
+  splash.hint = '加载异常，即将进入'
+  scheduleEnterHome()
 })

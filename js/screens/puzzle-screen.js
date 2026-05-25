@@ -11,6 +11,7 @@ var progress = require('../../utils/progress')
 var settings = require('../../utils/settings')
 var settingsModal = require('../settings-modal')
 var toolModal = require('../puzzle-tool-modal')
+var pressAnim = require('../press-anim')
 
 /** 倒计时区域（rpx）：只设宽度，水平居中，无左右边距 */
 var COUNTDOWN_WIDTH_RPX = 170
@@ -64,6 +65,7 @@ function PuzzleScreen(opts) {
   this.countdownTotalMs = 0
   this.countdownEnded = false
   this.loadError = ''
+  this._pressAnim = null
 }
 PuzzleScreen.prototype = Object.create(BaseScreen.prototype)
 PuzzleScreen.prototype.constructor = PuzzleScreen
@@ -92,7 +94,9 @@ PuzzleScreen.prototype._initEngine = function () {
   this.loadError = ''
   this.showSuccess = false
   this.showSettings = false
+  settingsModal.clearSettingsEnter(this)
   this.toolModal = null
+  toolModal.clearToolEnter(this)
   this.countdownEnded = false
   var limitMs = this.timeLimitSec > 0 ? this.timeLimitSec * 1000 : COUNTDOWN_DURATION_MS
   this.countdownTotalMs = limitMs
@@ -133,6 +137,8 @@ PuzzleScreen.prototype._initEngine = function () {
 
 PuzzleScreen.prototype.update = function (dt) {
   if (this.engine) this.engine.update(dt)
+  if (this.showSettings) settingsModal.tickSettingsEnter(this, dt)
+  if (this.toolModal) toolModal.tickToolEnter(this, dt)
   if (
     this.engine && !this.loading && !this.showSuccess && !this.showSettings &&
     !this.toolModal && !this.countdownEnded && this.countdownMs > 0
@@ -142,6 +148,12 @@ PuzzleScreen.prototype.update = function (dt) {
       this.countdownMs = 0
       this.countdownEnded = true
     }
+  }
+  var tick = pressAnim.tickPressAnim(this._pressAnim, dt)
+  this._pressAnim = tick.anim
+  if (tick.completed) {
+    if (tick.id === 'settings') this._openSettings()
+    else this._onBottomTool(tick.id)
   }
 }
 
@@ -211,10 +223,13 @@ PuzzleScreen.prototype.render = function (ctx) {
     this._drawSettingsModal(ctx, W, H)
   }
 
-  // 设置图标始终显示（叠在弹窗遮罩之上）
-  settingsModal.drawNavIcon(ctx, navY, navH)
-  if (!this.showSettings) {
-    this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () { self._openSettings() })
+  // 设置图标（按压动效结束后再弹窗）
+  var anim = this._pressAnim
+  settingsModal.drawNavIcon(ctx, navY, navH, pressAnim.btnScale(anim, 'settings'))
+  if (!this.showSettings && !anim) {
+    this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () {
+      self._startPressAnim('settings')
+    })
   }
 }
 
@@ -260,18 +275,29 @@ PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
   var startX = (W - totalW) / 2
   var y = H - rpx.safeBottom() - rpx.rpx(BOTTOM_TOOL_BOTTOM_RPX) - toolH
   var self = this
+  var anim = this._pressAnim
+  var blockHits = !!anim || this.showSuccess || this.showSettings || this.toolModal
 
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
     var tool = BOTTOM_TOOLS[i]
     var x = startX + i * (toolW + gap)
-    var img = assets.get(tool.path)
-    if (!img) assets.load(tool.path)
-    if (img) ctx.drawImage(img, x, y, toolW, toolH)
+    var cx = x + toolW / 2
+    var cy = y + toolH / 2
+    var scale = pressAnim.btnScale(anim, tool.action)
+    ;(function (t, px, py, sc) {
+      pressAnim.drawWithPressScale(ctx, px + toolW / 2, py + toolH / 2, sc, function () {
+        var img = assets.get(t.path)
+        if (!img) assets.load(t.path)
+        if (img) ctx.drawImage(img, px, py, toolW, toolH)
+      })
+    })(tool, x, y, scale)
 
-    var rect = { x: x, y: y, w: toolW, h: toolH }
-    ;(function (action) {
-      self.addHitZone(rect, function () { self._onBottomTool(action) })
-    })(tool.action)
+    if (!blockHits) {
+      var rect = { x: x, y: y, w: toolW, h: toolH }
+      ;(function (action) {
+        self.addHitZone(rect, function () { self._startPressAnim(action) })
+      })(tool.action)
+    }
   }
 }
 
@@ -279,11 +305,13 @@ PuzzleScreen.prototype._onBottomTool = function (action) {
   if (this.showSuccess || this.showSettings || this.toolModal) return
   if (action === 'addTime' || action === 'hint' || action === 'preview') {
     this.toolModal = action
+    toolModal.beginToolEnter(this)
   }
 }
 
 PuzzleScreen.prototype._closeToolModal = function () {
   this.toolModal = null
+  toolModal.clearToolEnter(this)
 }
 
 PuzzleScreen.prototype._drawToolModal = function (ctx, W, H) {
@@ -330,6 +358,7 @@ PuzzleScreen.prototype._drawSettingsModal = function (ctx, W, H) {
     onClose: function () { self._closeSettings() },
     onRestart: function () {
       self.showSettings = false
+      settingsModal.clearSettingsEnter(self)
       self._initEngine()
     },
     onHome: function () { self._goHome() },
@@ -343,6 +372,7 @@ PuzzleScreen.prototype._drawSettingsModal = function (ctx, W, H) {
 
 PuzzleScreen.prototype._goHome = function () {
   this.showSettings = false
+  settingsModal.clearSettingsEnter(this)
   this.showSuccess = false
   this.manager.replace(new HomeScreen())
 }
@@ -350,10 +380,19 @@ PuzzleScreen.prototype._goHome = function () {
 PuzzleScreen.prototype._openSettings = function () {
   if (this.showSuccess) return
   this.showSettings = true
+  settingsModal.beginSettingsEnter(this)
+}
+
+PuzzleScreen.prototype._startPressAnim = function (id) {
+  if (this._pressAnim) return
+  if (this.loading || !this.engine || this.loadError) return
+  if (this.showSuccess || this.showSettings || this.toolModal) return
+  this._pressAnim = { id: id, time: 0 }
 }
 
 PuzzleScreen.prototype._closeSettings = function () {
   this.showSettings = false
+  settingsModal.clearSettingsEnter(this)
 }
 
 PuzzleScreen.prototype._drawSuccess = function (ctx, W, H) {
@@ -436,6 +475,7 @@ PuzzleScreen.prototype.onTouchEnd = function (e) {
 PuzzleScreen.prototype.onTouchCancel = function () {
   if (this._engineTouching && this.engine) this.engine.onTouchCancel()
   this._engineTouching = false
+  this._pressAnim = null
 }
 
 module.exports = PuzzleScreen

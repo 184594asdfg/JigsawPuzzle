@@ -4,6 +4,7 @@
 var rpx = require('./rpx')
 var assets = require('./assets')
 var draw = require('./draw')
+var pressAnim = require('./press-anim')
 var settings = require('../utils/settings')
 var user = require('../utils/user')
 var bgm = require('./bgm')
@@ -22,6 +23,18 @@ var MODAL_ASPECT = SRC_W / SRC_H
 var MODAL_PAD_X_RPX = 72
 var MODAL_PAD_Y_RPX = 56
 var MODAL_MAX_WIDTH_RPX = 540
+
+function tickSettingsEnter(screen, dt) {
+  screen._settingsEnterAnim = pressAnim.tickModalEnterAnim(screen._settingsEnterAnim, dt)
+}
+
+function beginSettingsEnter(screen) {
+  screen._settingsEnterAnim = { time: 0 }
+}
+
+function clearSettingsEnter(screen) {
+  screen._settingsEnterAnim = null
+}
 
 var AVATAR_BG = 'images/settings/avatar-bg.png'
 
@@ -146,13 +159,27 @@ function navHitRect(navY, navH, expand) {
   return { x: x - pad, y: y - pad, w: size + pad * 2, h: size + pad * 2 }
 }
 
-function drawNavIcon(ctx, navY, navH) {
+function drawNavIcon(ctx, navY, navH, scale) {
+  scale = scale == null ? 1 : scale
   var rect = navHitRect(navY, navH, false)
   var img = assets.get(NAV_ICON)
   if (!img) assets.load(NAV_ICON)
   if (img) {
     var drawable = getImageNoBg(NAV_ICON)
-    if (drawable) ctx.drawImage(drawable, rect.x, rect.y, rect.w, rect.h)
+    if (drawable) {
+      if (scale === 1) {
+        ctx.drawImage(drawable, rect.x, rect.y, rect.w, rect.h)
+      } else {
+        ctx.save()
+        var cx = rect.x + rect.w / 2
+        var cy = rect.y + rect.h / 2
+        ctx.translate(cx, cy)
+        ctx.scale(scale, scale)
+        ctx.translate(-cx, -cy)
+        ctx.drawImage(drawable, rect.x, rect.y, rect.w, rect.h)
+        ctx.restore()
+      }
+    }
   }
   return rect
 }
@@ -201,7 +228,7 @@ function drawToggleIcon(ctx, slot, path) {
   ctx.drawImage(img, slot.x, slot.y, slot.w, slot.h)
 }
 
-function drawOverlay(screen, ctx, modal, handlers) {
+function drawOverlay(screen, ctx, modal, handlers, canInteract) {
   var sx = modal.w / SRC_W
   var ul = USER_LAYOUT
   var onToggle = handlers.onToggle
@@ -239,20 +266,21 @@ function drawOverlay(screen, ctx, modal, handlers) {
   )
 
   for (var i = 0; i < ICON_ROWS.length; i++) {
-    drawIconRow(screen, ctx, modal, ICON_ROWS[i], onToggle)
+    drawIconRow(screen, ctx, modal, ICON_ROWS[i], onToggle, canInteract)
   }
 
   if (handlers.showActionButtons !== false) {
     for (var j = 0; j < BUTTONS.length; j++) {
-      drawButton(screen, ctx, modal, BUTTONS[j], handlers)
+      drawButton(screen, ctx, modal, BUTTONS[j], handlers, canInteract)
     }
   }
 }
 
-function drawIconRow(screen, ctx, modal, row, onToggle) {
+function drawIconRow(screen, ctx, modal, row, onToggle, canInteract) {
   var slot = mapDesignRect(modal, row.x, row.y, row.w, row.h)
   var path = settings.get(row.key) ? row.onPath : row.offPath
   drawToggleIcon(ctx, slot, path)
+  if (!canInteract) return
   screen.addHitZone(slot, function () {
     settings.toggle(row.key)
     if (row.key === 'music') bgm.sync()
@@ -260,9 +288,10 @@ function drawIconRow(screen, ctx, modal, row, onToggle) {
   })
 }
 
-function drawButton(screen, ctx, modal, btn, handlers) {
+function drawButton(screen, ctx, modal, btn, handlers, canInteract) {
   var slot = mapDesignRect(modal, btn.x, btn.y, btn.w, btn.h)
   drawImage(ctx, slot, btn.path)
+  if (!canInteract) return
   screen.addHitZone(slot, function () {
     if (btn.action === 'restart' && handlers.onRestart) {
       handlers.onRestart()
@@ -275,49 +304,64 @@ function drawButton(screen, ctx, modal, btn, handlers) {
 function drawModal(screen, ctx, W, H, handlers) {
   handlers = handlers || {}
   var onClose = handlers.onClose || function () {}
+  var enterAnim = screen._settingsEnterAnim
+  var enterTime = enterAnim ? enterAnim.time : pressAnim.MODAL_ENTER_MS
+  var scale = pressAnim.getModalEnterScale(enterAnim)
+  var canInteract = !pressAnim.isModalEntering(enterAnim)
+  var overlayAlpha = pressAnim.modalOverlayAlpha(enterTime)
 
   screen.resetHitZones()
-  ctx.fillStyle = 'rgba(30,30,50,0.55)'
+  ctx.fillStyle = 'rgba(30,30,50,' + overlayAlpha + ')'
   ctx.fillRect(0, 0, W, H)
 
-  screen.addHitZone({ x: 0, y: 0, w: W, h: H }, onClose)
+  if (canInteract) {
+    screen.addHitZone({ x: 0, y: 0, w: W, h: H }, onClose)
+  }
 
   var rect = computeModalRect(W, H)
-  screen.addHitZone(rect, function () {})
+  if (canInteract) {
+    screen.addHitZone(rect, function () {})
+  }
 
+  var cx = rect.x + rect.w / 2
+  var cy = rect.y + rect.h / 2
   var img = assets.get(MODAL_IMAGE)
   if (!img) assets.load(MODAL_IMAGE)
 
-  if (img) {
-    ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h)
-    drawOverlay(screen, ctx, rect, handlers)
-  } else {
-    draw.fillRoundedRect(ctx, rect.x, rect.y, rect.w, rect.h, rpx.rpx(28), '#e8f2ef')
-    draw.fillTextCentered(
-      ctx, '设置', rect.x + rect.w / 2, rect.y + rect.h / 2 - rpx.rpx(20),
-      '600 ' + rpx.rpx(34).toFixed(0) + 'px sans-serif', '#3d5a52'
-    )
-    draw.fillTextCentered(
-      ctx, '请放置 settings-modal.png', rect.x + rect.w / 2, rect.y + rect.h / 2 + rpx.rpx(28),
-      '400 ' + rpx.rpx(24).toFixed(0) + 'px sans-serif', '#7a9a90'
-    )
-  }
-
-  var closeRect = mapDesignRect(rect, CLOSE_LAYOUT.x, CLOSE_LAYOUT.y, CLOSE_LAYOUT.w, CLOSE_LAYOUT.h)
-  if (!img) {
-    var closeSize = rpx.rpx(64)
-    closeRect = {
-      x: rect.x + rect.w - closeSize + rpx.rpx(8),
-      y: rect.y - rpx.rpx(8),
-      w: closeSize,
-      h: closeSize
+  pressAnim.drawWithPressScale(ctx, cx, cy, scale, function () {
+    if (img) {
+      ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h)
+      drawOverlay(screen, ctx, rect, handlers, canInteract)
+    } else {
+      draw.fillRoundedRect(ctx, rect.x, rect.y, rect.w, rect.h, rpx.rpx(28), '#e8f2ef')
+      draw.fillTextCentered(
+        ctx, '设置', rect.x + rect.w / 2, rect.y + rect.h / 2 - rpx.rpx(20),
+        '600 ' + rpx.rpx(34).toFixed(0) + 'px sans-serif', '#3d5a52'
+      )
+      draw.fillTextCentered(
+        ctx, '请放置 settings-modal.png', rect.x + rect.w / 2, rect.y + rect.h / 2 + rpx.rpx(28),
+        '400 ' + rpx.rpx(24).toFixed(0) + 'px sans-serif', '#7a9a90'
+      )
     }
-    draw.fillTextCentered(
-      ctx, '×', closeRect.x + closeRect.w / 2, closeRect.y + closeRect.h / 2,
-      '400 ' + rpx.rpx(44).toFixed(0) + 'px sans-serif', '#ffffff'
-    )
+  })
+
+  if (canInteract) {
+    var closeRect = mapDesignRect(rect, CLOSE_LAYOUT.x, CLOSE_LAYOUT.y, CLOSE_LAYOUT.w, CLOSE_LAYOUT.h)
+    if (!img) {
+      var closeSize = rpx.rpx(64)
+      closeRect = {
+        x: rect.x + rect.w - closeSize + rpx.rpx(8),
+        y: rect.y - rpx.rpx(8),
+        w: closeSize,
+        h: closeSize
+      }
+      draw.fillTextCentered(
+        ctx, '×', closeRect.x + closeRect.w / 2, closeRect.y + closeRect.h / 2,
+        '400 ' + rpx.rpx(44).toFixed(0) + 'px sans-serif', '#ffffff'
+      )
+    }
+    screen.addHitZone(closeRect, onClose)
   }
-  screen.addHitZone(closeRect, onClose)
 }
 
 module.exports = {
@@ -330,5 +374,8 @@ module.exports = {
   isNavHit: isNavHit,
   drawNavIcon: drawNavIcon,
   drawModal: drawModal,
-  computeModalRect: computeModalRect
+  computeModalRect: computeModalRect,
+  beginSettingsEnter: beginSettingsEnter,
+  clearSettingsEnter: clearSettingsEnter,
+  tickSettingsEnter: tickSettingsEnter
 }
