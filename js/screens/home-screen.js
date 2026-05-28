@@ -21,6 +21,8 @@ var HOME_HERO_GRID_BG = 'images/home-hero-grid-bg.png'
 var ICON_RANK = 'images/icons/rank.png'
 var ICON_LEVEL = 'images/icons/level.png'
 var ICON_GALLERY = 'images/icons/gallery.png'
+/** 首页底部排行入口（暂隐藏） */
+var SHOW_RANK_BTN = false
 
 // 底部侧钮尺寸（排行 / 图库）
 var SIDE_BTN_W_RPX = 110
@@ -454,12 +456,14 @@ HomeScreen.prototype._drawBottomBar = function (ctx, layout) {
   var anim = this._pressAnim
   var blockHits = !!anim || this.showRank || this.showSettings
 
-  this._drawSideIcon(
-    ctx, ICON_RANK, rank.cx, rank.cy, rank.w, rank.h, pressAnim.btnScale(anim, 'rank')
-  )
-  this._sideButtonRects.rank = rank
-  if (!blockHits) {
-    this.addHitZone(rank, function () { self._startPressAnim('rank') })
+  if (SHOW_RANK_BTN) {
+    this._drawSideIcon(
+      ctx, ICON_RANK, rank.cx, rank.cy, rank.w, rank.h, pressAnim.btnScale(anim, 'rank')
+    )
+    this._sideButtonRects.rank = rank
+    if (!blockHits) {
+      this.addHitZone(rank, function () { self._startPressAnim('rank') })
+    }
   }
 
   this._drawSideIcon(

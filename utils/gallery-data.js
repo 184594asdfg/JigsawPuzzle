@@ -7,6 +7,11 @@ var config = require('./app-config')
 var DEFAULT_GRID = 4
 var LEVELS_PER_THEME = 25
 
+/** 图集关卡格 1x 缩略图（CDN imageView2，与 bookSnap 一致） */
+var GALLERY_THUMB_W = 180
+var GALLERY_THUMB_H = 266
+var GALLERY_THUMB_QUALITY = 85
+
 var THEME_CARD_UNLOCKED = 'images/themes/theme-unlocked.png'
 var THEME_CARD_LOCKED = 'images/themes/theme-locked.png'
 var LEVEL_THUMB_PLACEHOLDER = 'images/themes/level-placeholder.png'
@@ -40,12 +45,25 @@ function buildLevelImageUrl(imageFolder, levelNum) {
   return prefix + folder + '/' + num + '.png'
 }
 
+/** CDN 原图 URL 追加缩略图处理参数（仅用于图集列表展示） */
+function appendGalleryThumbParams(url) {
+  if (!url || url.indexOf('http') !== 0) return url
+  if (url.indexOf('imageView2') >= 0) return url
+  return url + '?imageView2/3/w/' + GALLERY_THUMB_W + '/h/' + GALLERY_THUMB_H +
+    '/q/' + GALLERY_THUMB_QUALITY + '/interlace/1/format/webp'
+}
+
 function resolveLevelImage(theme, levelNum, level) {
   if (level && level.image) return level.image
   if (theme && theme.imageFolder && levelNum) {
     return buildLevelImageUrl(theme.imageFolder, levelNum)
   }
   return ''
+}
+
+function resolveLevelThumbImage(theme, levelNum, level) {
+  var full = resolveLevelImage(theme, levelNum, level)
+  return full ? appendGalleryThumbParams(full) : ''
 }
 
 function resolveLevelForPlay(themeId, levelKey, levelNum, partial) {
@@ -246,6 +264,10 @@ module.exports = {
   buildThemeCoverUrl: buildThemeCoverUrl,
   buildLevelImageUrl: buildLevelImageUrl,
   buildLevelKey: buildLevelKey,
+  appendGalleryThumbParams: appendGalleryThumbParams,
   resolveLevelImage: resolveLevelImage,
-  resolveLevelForPlay: resolveLevelForPlay
+  resolveLevelThumbImage: resolveLevelThumbImage,
+  resolveLevelForPlay: resolveLevelForPlay,
+  GALLERY_THUMB_W: GALLERY_THUMB_W,
+  GALLERY_THUMB_H: GALLERY_THUMB_H
 }

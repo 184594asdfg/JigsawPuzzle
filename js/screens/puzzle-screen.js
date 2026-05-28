@@ -13,6 +13,7 @@ var settingsModal = require('../settings-modal')
 var toolModal = require('../puzzle-tool-modal')
 var toolRewardFly = require('../tool-reward-fly')
 var addTimeAlarmFly = require('../add-time-alarm-fly')
+var timeupOverlay = require('../timeup-overlay')
 var tools = require('../../utils/tools')
 var pressAnim = require('../press-anim')
 var sfx = require('../sfx')
@@ -100,6 +101,7 @@ function PuzzleScreen(opts) {
   this._toolConsuming = false
   this.showPreviewOverlay = false
   this.previewSessionMs = 0
+  this._timeupFxMs = 0
 }
 PuzzleScreen.prototype = Object.create(BaseScreen.prototype)
 PuzzleScreen.prototype.constructor = PuzzleScreen
@@ -108,6 +110,7 @@ PuzzleScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
   settingsModal.preload()
   toolModal.preload()
+  timeupOverlay.preload()
   assets.load(COUNTDOWN_ALARM_IMAGE)
   assets.load(PREVIEW_ICON_VIEWING)
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
@@ -139,6 +142,7 @@ PuzzleScreen.prototype._initEngine = function () {
   this.showPreviewOverlay = false
   this.previewSessionMs = 0
   this.countdownEnded = false
+  this._timeupFxMs = 0
   tools.fetchTools()
   var limitMs = this.timeLimitSec > 0 ? this.timeLimitSec * 1000 : COUNTDOWN_DURATION_MS
   this.countdownTotalMs = limitMs
@@ -209,13 +213,21 @@ PuzzleScreen.prototype.update = function (dt) {
     this.countdownMs -= dt
     if (this.countdownMs <= 0) {
       this.countdownMs = 0
-      this.countdownEnded = true
+      if (!this.countdownEnded) {
+        this.countdownEnded = true
+        timeupOverlay.resetFx(this)
+      }
     }
+  }
+  if (this.countdownEnded && !this.showSuccess) {
+    timeupOverlay.tickFx(this, dt)
   }
   var tick = pressAnim.tickPressAnim(this._pressAnim, dt)
   this._pressAnim = tick.anim
   if (tick.completed) {
     if (tick.id === 'settings') this._openSettings()
+    else if (tick.id === 'timeupHome') this._onTimeUpGoHome()
+    else if (tick.id === 'timeupWatch') this._onTimeUpWatchAddTime()
     else this._onBottomTool(tick.id)
   }
 }
@@ -268,6 +280,11 @@ PuzzleScreen.prototype.render = function (ctx) {
     this._drawPreviewOverlay(ctx, W, H)
   }
 
+  if (this.countdownEnded && !this.showSuccess) {
+    this._drawTimeUpOverlay(ctx, W, H)
+    return
+  }
+
   if (this.showSuccess) {
     this._drawSuccess(ctx, W, H)
     return
@@ -285,7 +302,8 @@ PuzzleScreen.prototype.render = function (ctx) {
   // 设置图标（按压动效结束后再弹窗）
   var anim = this._pressAnim
   settingsModal.drawNavIcon(ctx, navY, navH, pressAnim.btnScale(anim, 'settings'))
-  if (!this.showSettings && !anim && !(this.engine && this.engine.isInputLocked())) {
+  if (!this.showSettings && !anim && !this.countdownEnded &&
+    !(this.engine && this.engine.isInputLocked())) {
     this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () {
       self._startPressAnim('settings')
     })
@@ -388,6 +406,7 @@ PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
   var self = this
   var anim = this._pressAnim
   var blockHits = !!anim || this.showSuccess || this.showSettings || this.toolModal ||
+    this.countdownEnded ||
     this.showPreviewOverlay || toolRewardFly.isActive(this) ||
     addTimeAlarmFly.isActive(this) ||
     (this.engine && this.engine.isInputLocked())
@@ -437,7 +456,7 @@ PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
 }
 
 PuzzleScreen.prototype._onBottomTool = function (action) {
-  if (this.showSuccess || this.showSettings || this.toolModal) return
+  if (this.showSuccess || this.showSettings || this.toolModal || this.countdownEnded) return
   if (toolRewardFly.isActive(this) || addTimeAlarmFly.isActive(this)) return
   if (this.engine && this.engine.isInputLocked()) return
   if (action === 'preview' && isPreviewSessionActive(this)) {
@@ -616,6 +635,40 @@ PuzzleScreen.prototype._addCountdownTime = function () {
   this.countdownEnded = false
 }
 
+PuzzleScreen.prototype._drawTimeUpOverlay = function (ctx, W, H) {
+  var self = this
+  var pressId = this._pressAnim && (
+    this._pressAnim.id === 'timeupHome' || this._pressAnim.id === 'timeupWatch'
+  ) ? this._pressAnim.id : null
+  timeupOverlay.drawOverlay(this, ctx, W, H, {
+    onGoHome: function () { self._startPressAnim('timeupHome') },
+    onWatchAddTime: function () { self._startPressAnim('timeupWatch') }
+  }, pressId)
+}
+
+/** 观看加时：暂不接激励视频，直接 +60 秒并继续 */
+PuzzleScreen.prototype._onTimeUpWatchAddTime = function () {
+  if (!this.countdownEnded || this._toolConsuming) return
+  var self = this
+  var W = rpx.windowWidth()
+  var layout = timeupOverlay.computeLayout(W, rpx.windowHeight())
+  var cd = this._getCountdownLayout(W)
+  this.countdownEnded = false
+  addTimeAlarmFly.start(this, {
+    fromX: layout.watchCx,
+    fromY: layout.btnCy,
+    toX: cd.alarmCx,
+    toY: cd.alarmCy,
+    onDone: function () { self._addCountdownTime() }
+  })
+}
+
+PuzzleScreen.prototype._onTimeUpGoHome = function () {
+  if (!this.countdownEnded) return
+  this.countdownEnded = false
+  this._goHome()
+}
+
 PuzzleScreen.prototype._drawPrimaryButton = function (ctx, x, y, w, h, label) {
   var grad = ctx.createLinearGradient(x, y, x + w, y + h)
   grad.addColorStop(0, '#667eea')
@@ -655,7 +708,7 @@ PuzzleScreen.prototype._goHome = function () {
 }
 
 PuzzleScreen.prototype._openSettings = function () {
-  if (this.showSuccess) return
+  if (this.showSuccess || this.countdownEnded) return
   if (this.engine && this.engine.isInputLocked()) return
   this.showSettings = true
   settingsModal.beginSettingsEnter(this)
@@ -664,9 +717,15 @@ PuzzleScreen.prototype._openSettings = function () {
 PuzzleScreen.prototype._startPressAnim = function (id) {
   if (this._pressAnim) return
   if (this.loading || !this.engine || this.loadError) return
-  if (this.showSuccess || this.showSettings || this.toolModal) return
-  if (toolRewardFly.isActive(this) || addTimeAlarmFly.isActive(this)) return
-  if (this.engine && this.engine.isInputLocked()) return
+  var isTimeUp = id === 'timeupHome' || id === 'timeupWatch'
+  if (isTimeUp) {
+    if (!this.countdownEnded || this.showSuccess) return
+    if (toolRewardFly.isActive(this) || addTimeAlarmFly.isActive(this)) return
+  } else {
+    if (this.showSuccess || this.showSettings || this.toolModal || this.countdownEnded) return
+    if (toolRewardFly.isActive(this) || addTimeAlarmFly.isActive(this)) return
+    if (this.engine && this.engine.isInputLocked()) return
+  }
   sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
 }
@@ -720,6 +779,7 @@ PuzzleScreen.prototype._drawSuccess = function (ctx, W, H) {
 PuzzleScreen.prototype._isOnEngine = function (x, y) {
   if (!this.engine || this.loading || this.engine.isInputLocked() ||
     this.showSuccess || this.showSettings || this.toolModal ||
+    this.countdownEnded ||
     this.showPreviewOverlay || toolRewardFly.isActive(this) ||
     addTimeAlarmFly.isActive(this)) return false
   var board = this.engine.boardSize()

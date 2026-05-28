@@ -120,12 +120,14 @@ GalleryScreen.prototype._buildCurrentTheme = function (themeId) {
     var key = l ? l.key : galleryData.buildLevelKey(t.id, n)
     var done = progress.isLevelComplete(key)
     var image = done ? galleryData.resolveLevelImage(t, n, l) : ''
+    var thumbImage = image ? galleryData.appendGalleryThumbParams(image) : ''
     levels.push({
       key: key,
       themeId: t.id,
       level: l ? l.level : n,
       name: l ? l.name : ('关卡 ' + n),
       image: image,
+      thumbImage: thumbImage,
       grid: l ? l.grid : galleryData.DEFAULT_GRID,
       timeLimit: l ? l.timeLimit : 0,
       done: done
@@ -367,12 +369,13 @@ GalleryScreen.prototype._drawLevelCard = function (ctx, level, x, y, w, h) {
   ctx.translate(-cx, -cy)
   draw.roundedRectPath(ctx, x, y, w, h, rpx.rpx(16))
   ctx.clip()
-  if (level.done && level.image) {
-    var img = assets.get(level.image)
+  if (level.done && (level.thumbImage || level.image)) {
+    var thumbSrc = level.thumbImage || level.image
+    var img = assets.get(thumbSrc)
     if (img) {
       draw.drawImageCover(ctx, img, x, y, w, h)
     } else {
-      assets.tryLoad(level.image)
+      assets.tryLoad(thumbSrc)
       ctx.fillStyle = '#1f5c9c'
       ctx.fillRect(x, y, w, h)
     }
