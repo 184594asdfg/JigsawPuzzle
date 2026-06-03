@@ -22,6 +22,24 @@ var loadError = null
 var loadingPromise = null
 var themeLevelsLoading = {}
 
+function isAbsoluteUrl(url) {
+  return url.indexOf('http://') === 0 || url.indexOf('https://') === 0
+}
+
+/** 将接口相对路径或目录片段拼成完整 CDN URL */
+function ensureCdnUrl(urlOrPath) {
+  if (!urlOrPath) return ''
+  var s = String(urlOrPath).trim()
+  if (!s) return ''
+  if (isAbsoluteUrl(s)) return s
+  var prefix = config.cdnPrefix || ''
+  if (!prefix) return s
+  if (prefix.charAt(prefix.length - 1) !== '/') prefix += '/'
+  var path = s.replace(/^\/+/, '')
+  if (path.indexOf('jigsaw/') === 0) path = path.slice('jigsaw/'.length)
+  return prefix + path
+}
+
 function buildThemeCoverUrl(imageFolder) {
   if (!imageFolder) return ''
   var prefix = config.cdnPrefix || ''
@@ -54,7 +72,7 @@ function appendGalleryThumbParams(url) {
 }
 
 function resolveLevelImage(theme, levelNum, level) {
-  if (level && level.image) return level.image
+  if (level && level.image) return ensureCdnUrl(level.image)
   if (theme && theme.imageFolder && levelNum) {
     return buildLevelImageUrl(theme.imageFolder, levelNum)
   }
@@ -94,7 +112,7 @@ function resolveLevelForPlay(themeId, levelKey, levelNum, partial) {
 
 function normalizeLevel(level, themeId, imageFolder) {
   var levelNum = level.level != null ? level.level : (level.levelNum || 0)
-  var image = level.image || level.imageUrl || ''
+  var image = ensureCdnUrl(level.image || level.imageUrl || '')
   if (!image && imageFolder && levelNum) {
     image = buildLevelImageUrl(imageFolder, levelNum)
   }
@@ -125,7 +143,7 @@ function normalizeTheme(theme) {
     icon: theme.icon || '',
     accent: theme.accent || '',
     imageFolder: theme.imageFolder || '',
-    themeImage: theme.themeImage || theme.theme_image_url ||
+    themeImage: ensureCdnUrl(theme.themeImage || theme.theme_image_url || '') ||
       buildThemeCoverUrl(theme.imageFolder || ''),
     totalLevels: totalLevels,
     levels: levels,
@@ -261,6 +279,7 @@ module.exports = {
   getLoadError: getLoadError,
   getThemeById: getThemeById,
   getLevelByKey: getLevelByKey,
+  ensureCdnUrl: ensureCdnUrl,
   buildThemeCoverUrl: buildThemeCoverUrl,
   buildLevelImageUrl: buildLevelImageUrl,
   buildLevelKey: buildLevelKey,

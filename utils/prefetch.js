@@ -22,7 +22,6 @@ function prefetchLevelImage(url) {
 }
 
 function resolveLevelImage(level, theme) {
-  if (level.image) return level.image
   return galleryData.resolveLevelImage(theme, level.level, level)
 }
 
