@@ -423,7 +423,6 @@ HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
     if (fallback) draw.drawImageCover(ctx, fallback, x, y, w, h)
   }
 
-  this._drawPuzzleGrid(ctx, x, y, w, h, cols, rows)
   ctx.restore()
 
   // 外圈细描边
@@ -431,66 +430,6 @@ HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
     ctx, x + 0.5, y + 0.5, w - 1, h - 1,
     rpx.rpx(24), 'rgba(255,255,255,0.16)', 1
   )
-}
-
-/**
- * 在指定矩形上叠加 cols×rows 的「带半圆凸起」的拼图块分隔线（经典 jigsaw 样式）。
- * 每条内部分割线在每格中点带一个半圆凸/凹，朝向用确定性伪随机决定（不会闪烁）。
- */
-HomeScreen.prototype._drawPuzzleGrid = function (ctx, x, y, w, h, cols, rows) {
-  var cellW = w / cols
-  var cellH = h / rows
-  var knobR = Math.min(cellW, cellH) * 0.18
-  var lineW = Math.max(2, rpx.rpx(2.5))
-
-  function dir(r, c, type) {
-    // 稳定伪随机，相同 (r,c,type) 总返回相同值
-    var hash = (r * 7 + c * 13 + (type === 'v' ? 1 : 17)) % 4
-    return hash < 2 ? 1 : -1
-  }
-
-  ctx.save()
-  ctx.strokeStyle = '#ffffff'
-  ctx.globalAlpha = 0.95
-  ctx.lineWidth = lineW
-  ctx.lineJoin = 'round'
-
-  // 垂直内部线（每条按 rows 段，每段中点带半圆）
-  for (var c = 0; c < cols - 1; c++) {
-    var lineX = x + cellW * (c + 1)
-    ctx.beginPath()
-    ctx.moveTo(lineX, y)
-    for (var r = 0; r < rows; r++) {
-      var top = y + cellH * r
-      var midY = top + cellH / 2
-      ctx.lineTo(lineX, midY - knobR)
-      // d=1 → 凸向右(顺时针)；d=-1 → 凸向左(逆时针)
-      var dv = dir(r, c, 'v')
-      ctx.arc(lineX, midY, knobR, -Math.PI / 2, Math.PI / 2, dv === -1)
-      ctx.lineTo(lineX, top + cellH)
-    }
-    ctx.stroke()
-  }
-
-  // 水平内部线
-  for (var rh = 0; rh < rows - 1; rh++) {
-    var lineY = y + cellH * (rh + 1)
-    ctx.beginPath()
-    ctx.moveTo(x, lineY)
-    for (var cc = 0; cc < cols; cc++) {
-      var left = x + cellW * cc
-      var midX = left + cellW / 2
-      ctx.lineTo(midX - knobR, lineY)
-      // dh=1 → 凸向下(逆时针)；dh=-1 → 凸向上(顺时针)
-      var dh = dir(rh, cc, 'h')
-      ctx.arc(midX, lineY, knobR, Math.PI, 0, dh === 1)
-      ctx.lineTo(left + cellW, lineY)
-    }
-    ctx.stroke()
-  }
-
-  ctx.globalAlpha = 1
-  ctx.restore()
 }
 
 HomeScreen.prototype._drawBottomBar = function (ctx, layout) {

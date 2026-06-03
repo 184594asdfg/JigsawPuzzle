@@ -23,13 +23,34 @@ var HINT_ANIM_DUR = 2000
 var HINT_DRAG_VISUAL_RATIO = 0.78
 var MERGE_FX_DUR = 1100
 /** 开局：拼图区右下角叠成一摞 → 顶牌飞出 → 每块绕自身水平中线翻面 */
+/** 发牌：3×3 铺开约 616ms，7×7 发牌阶段约 1.5s，中间难度线性过渡 */
 var INTRO_STAGGER_MS = 42
 var INTRO_FLY_DUR = 280
 var INTRO_FLIP_DUR = 480
+var INTRO_REF_GRID = 3
+var INTRO_MAX_GRID = 7
+var INTRO_SPREAD_MIN_MS = (INTRO_REF_GRID * INTRO_REF_GRID - 1) * INTRO_STAGGER_MS
+var INTRO_DEAL_TARGET_MAX_MS = 1500
+var INTRO_SPREAD_MAX_MS = INTRO_DEAL_TARGET_MAX_MS - INTRO_FLY_DUR
+
+function introSpreadMs(pieceCount) {
+  var n = Math.round(Math.sqrt(pieceCount))
+  if (n < INTRO_REF_GRID) return INTRO_SPREAD_MIN_MS
+  if (n >= INTRO_MAX_GRID) return INTRO_SPREAD_MAX_MS
+  var t = (n - INTRO_REF_GRID) / (INTRO_MAX_GRID - INTRO_REF_GRID)
+  return INTRO_SPREAD_MIN_MS + t * (INTRO_SPREAD_MAX_MS - INTRO_SPREAD_MIN_MS)
+}
+
+function introStaggerMs(pieceCount) {
+  if (pieceCount <= 1) return 0
+  return introSpreadMs(pieceCount) / (pieceCount - 1)
+}
 
 var SOUND_MOVE = 'audio/move.mp3'
 var SOUND_SWAP = 'audio/swap.mp3'
 var MERGE_FX_IMAGE = 'images/merge_fx.png'
+/** 开局发牌/翻面时的牌背图（2:3，铺满单块内层裁切区） */
+var CARD_BACK_IMAGE = 'images/puzzle-card-back.png'
 
 function easeOutCubic(t) {
   var p = 1 - t
@@ -226,13 +247,14 @@ PuzzleEngine.prototype._startIntroAnim = function () {
   for (var si = 0; si < list.length; si++) {
     stackLayerMap[list[si].piece.id] = list[si].layer
   }
+  var stagger = introStaggerMs(total)
   this._inputLocked = true
   this._intro = {
     phase: 'deal',
     showBack: true,
     stackX: stackBaseX,
     stackY: stackBaseY,
-    dealEndTime: now + (total - 1) * INTRO_STAGGER_MS + INTRO_FLY_DUR,
+    dealEndTime: now + (total - 1) * stagger + INTRO_FLY_DUR,
     stackLayer: stackLayerMap
   }
   sfx.playIntroDeal()
@@ -250,7 +272,7 @@ PuzzleEngine.prototype._startIntroAnim = function () {
     this._anims[piece.id] = {
       fromTx: fromTx,
       fromTy: fromTy,
-      t0: now + order * INTRO_STAGGER_MS,
+      t0: now + order * stagger,
       dur: INTRO_FLY_DUR,
       curTx: fromTx,
       curTy: fromTy
@@ -714,24 +736,15 @@ PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow,
   draw.roundedRectPathCorners(ctx, imgX, imgY, imgW, imgH, itl, itr, ibr, ibl)
   ctx.clip()
 
-  // 整图按 (cellW*N)×(cellH*N) 视口绘制；开局背面不显示图案
+  // 整图按 (cellW*N)×(cellH*N) 视口绘制；开局背面用牌背图
   if (showBack) {
-    ctx.fillStyle = '#dfe6e4'
-    ctx.fillRect(imgX, imgY, imgW, imgH)
-    ctx.strokeStyle = 'rgba(0,0,0,0.06)'
-    ctx.lineWidth = 1
-    var step = Math.max(8, Math.floor(Math.min(imgW, imgH) / 6))
-    for (var lx = imgX; lx < imgX + imgW; lx += step) {
-      ctx.beginPath()
-      ctx.moveTo(lx, imgY)
-      ctx.lineTo(lx, imgY + imgH)
-      ctx.stroke()
-    }
-    for (var ly = imgY; ly < imgY + imgH; ly += step) {
-      ctx.beginPath()
-      ctx.moveTo(imgX, ly)
-      ctx.lineTo(imgX + imgW, ly)
-      ctx.stroke()
+    var backImg = assets.get(CARD_BACK_IMAGE)
+    if (!backImg) {
+      assets.tryLoad(CARD_BACK_IMAGE)
+      ctx.fillStyle = '#dfe6e4'
+      ctx.fillRect(imgX, imgY, imgW, imgH)
+    } else {
+      draw.drawImageCover(ctx, backImg, imgX, imgY, imgW, imgH)
     }
   } else if (this.image) {
     var fullW = this.layout.imgW
@@ -1194,3 +1207,4 @@ PuzzleEngine.prototype._checkWin = function () {
 }
 
 module.exports = PuzzleEngine
+module.exports.CARD_BACK_IMAGE = CARD_BACK_IMAGE

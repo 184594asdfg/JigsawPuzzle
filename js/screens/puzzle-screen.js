@@ -117,6 +117,7 @@ PuzzleScreen.prototype.onEnter = function (manager) {
   toolModal.preload()
   timeupOverlay.preload()
   winOverlay.preload()
+  assets.load(PuzzleEngine.CARD_BACK_IMAGE)
   assets.load(COUNTDOWN_ALARM_IMAGE)
   assets.load(PREVIEW_ICON_VIEWING)
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
