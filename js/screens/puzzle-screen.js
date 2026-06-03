@@ -20,6 +20,7 @@ var prefetch = require('../../utils/prefetch')
 var tools = require('../../utils/tools')
 var pressAnim = require('../press-anim')
 var sfx = require('../sfx')
+var rewardedAd = require('../rewarded-ad')
 
 /** 倒计时区域（rpx）：只设宽度，水平居中，无左右边距 */
 var COUNTDOWN_WIDTH_RPX = 170
@@ -107,6 +108,7 @@ function PuzzleScreen(opts) {
   this._timeupFxMs = 0
   this._winNewUnlock = false
   this._winNavigatingHome = false
+  this._countdownPaused = false
 }
 PuzzleScreen.prototype = Object.create(BaseScreen.prototype)
 PuzzleScreen.prototype.constructor = PuzzleScreen
@@ -118,6 +120,7 @@ PuzzleScreen.prototype.onEnter = function (manager) {
   timeupOverlay.preload()
   winOverlay.preload()
   assets.load(PuzzleEngine.CARD_BACK_IMAGE)
+  rewardedAd.init()
   assets.load(COUNTDOWN_ALARM_IMAGE)
   assets.load(PREVIEW_ICON_VIEWING)
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
@@ -128,6 +131,7 @@ PuzzleScreen.prototype.onEnter = function (manager) {
 }
 
 PuzzleScreen.prototype.onExit = function () {
+  rewardedAd.destroy()
   if (this.engine) {
     this.engine.destroy()
     this.engine = null
@@ -149,6 +153,7 @@ PuzzleScreen.prototype._initEngine = function () {
   this.showPreviewOverlay = false
   this.previewSessionMs = 0
   this.countdownEnded = false
+  this._countdownPaused = false
   this._timeupFxMs = 0
   this._winNewUnlock = false
   this._winNavigatingHome = false
@@ -222,6 +227,7 @@ PuzzleScreen.prototype.update = function (dt) {
     this.engine && !this.loading && !this.engine.isInputLocked() &&
     !this.showSuccess && !this.showSettings &&
     !this.toolModal &&
+    !this._countdownPaused &&
     !this.countdownEnded && this.countdownMs > 0
   ) {
     this.countdownMs -= dt
@@ -229,6 +235,7 @@ PuzzleScreen.prototype.update = function (dt) {
       this.countdownMs = 0
       if (!this.countdownEnded) {
         this.countdownEnded = true
+        sfx.playTimeup()
         timeupOverlay.resetFx(this)
       }
     }
@@ -501,6 +508,19 @@ PuzzleScreen.prototype._closeToolModal = function () {
   toolModal.clearToolEnter(this)
 }
 
+/** 激励视频播放期间暂停关卡倒计时，关闭或加载失败后恢复 */
+PuzzleScreen.prototype._showRewardedAd = function () {
+  var self = this
+  self._countdownPaused = true
+  return rewardedAd.show().then(function (completed) {
+    self._countdownPaused = false
+    return completed
+  }, function (err) {
+    self._countdownPaused = false
+    throw err
+  })
+}
+
 PuzzleScreen.prototype._drawToolModal = function (ctx, W, H) {
   var self = this
   var type = this.toolModal
@@ -510,7 +530,7 @@ PuzzleScreen.prototype._drawToolModal = function (ctx, W, H) {
   })
 }
 
-/** 立刻获得：暂不接广告，grant 增加次数 + 飞图标落按钮；不自动 consume，需用户再点底部按钮使用 */
+/** 观看激励视频后 grant +1，飞图标落按钮；不自动 consume，需用户再点底部按钮使用 */
 PuzzleScreen.prototype._onToolModalConfirm = function (type, W, H) {
   var self = this
   var layout = this._getBottomToolLayout(W, H)
@@ -529,8 +549,14 @@ PuzzleScreen.prototype._onToolModalConfirm = function (type, W, H) {
   }
 
   this._closeToolModal()
-  tools.grant(type, 'ad').then(runGrantFly).catch(function (err) {
-    try { wx.showToast({ title: err.message || '发放失败', icon: 'none' }) } catch (e) {}
+  this._showRewardedAd().then(function (completed) {
+    if (!completed) {
+      try { wx.showToast({ title: '需完整观看广告才能获得道具', icon: 'none' }) } catch (e) {}
+      return
+    }
+    return tools.grant(type, 'ad').then(runGrantFly)
+  }).catch(function (err) {
+    try { wx.showToast({ title: err.message || '广告加载失败', icon: 'none' }) } catch (e) {}
   })
 }
 
@@ -669,20 +695,28 @@ PuzzleScreen.prototype._drawTimeUpOverlay = function (ctx, W, H) {
   }, pressId)
 }
 
-/** 观看加时：暂不接激励视频，直接 +60 秒并继续 */
+/** 观看激励视频后 +60 秒并继续 */
 PuzzleScreen.prototype._onTimeUpWatchAddTime = function () {
   if (!this.countdownEnded || this._toolConsuming) return
   var self = this
-  var W = rpx.windowWidth()
-  var layout = timeupOverlay.computeLayout(W, rpx.windowHeight())
-  var cd = this._getCountdownLayout(W)
-  this.countdownEnded = false
-  addTimeAlarmFly.start(this, {
-    fromX: layout.watchCx,
-    fromY: layout.btnCy,
-    toX: cd.alarmCx,
-    toY: cd.alarmCy,
-    onDone: function () { self._addCountdownTime() }
+  this._showRewardedAd().then(function (completed) {
+    if (!completed) {
+      try { wx.showToast({ title: '需完整观看广告才能加时', icon: 'none' }) } catch (e) {}
+      return
+    }
+    var W = rpx.windowWidth()
+    var layout = timeupOverlay.computeLayout(W, rpx.windowHeight())
+    var cd = self._getCountdownLayout(W)
+    self.countdownEnded = false
+    addTimeAlarmFly.start(self, {
+      fromX: layout.watchCx,
+      fromY: layout.btnCy,
+      toX: cd.alarmCx,
+      toY: cd.alarmCy,
+      onDone: function () { self._addCountdownTime() }
+    })
+  }).catch(function (err) {
+    try { wx.showToast({ title: err.message || '广告加载失败', icon: 'none' }) } catch (e) {}
   })
 }
 

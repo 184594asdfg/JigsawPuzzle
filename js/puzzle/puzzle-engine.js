@@ -51,6 +51,9 @@ var SOUND_SWAP = 'audio/swap.mp3'
 var MERGE_FX_IMAGE = 'images/merge_fx.png'
 /** 开局发牌/翻面时的牌背图（2:3，铺满单块内层裁切区） */
 var CARD_BACK_IMAGE = 'images/puzzle-card-back.png'
+/** 每格原位半透明占位（拖拽/交换动画时露出） */
+var SLOT_PLACEHOLDER_FILL = 'rgba(255,255,255,0.38)'
+var SLOT_PLACEHOLDER_STROKE = 'rgba(0,0,0,0.12)'
 
 function easeOutCubic(t) {
   var p = 1 - t
@@ -614,6 +617,30 @@ PuzzleEngine.prototype._groupTy = function (g) {
 //  渲染
 // ---------------------------------------------------------------------------
 
+PuzzleEngine.prototype._renderSlotPlaceholders = function (ctx, bx, by, L) {
+  var N = this.gridSize
+  var R = L.PIECE_RADIUS
+  var total = N * N
+  var slot, col, row, pos, x, y
+
+  ctx.save()
+  ctx.fillStyle = SLOT_PLACEHOLDER_FILL
+  ctx.strokeStyle = SLOT_PLACEHOLDER_STROKE
+  ctx.lineWidth = 1
+  for (slot = 0; slot < total; slot++) {
+    col = slot % N
+    row = Math.floor(slot / N)
+    pos = layoutMod.slotToXY(L, col, row)
+    x = bx + pos.x
+    y = by + pos.y
+    draw.roundedRectPathCorners(ctx, x, y, L.cellW, L.cellH, R, R, R, R)
+    ctx.fill()
+    draw.roundedRectPathCorners(ctx, x + 0.5, y + 0.5, L.cellW - 1, L.cellH - 1, R, R, R, R)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
 PuzzleEngine.prototype.render = function (ctx) {
   if (this._introPending) {
     this._introPending = false
@@ -643,6 +670,10 @@ PuzzleEngine.prototype.render = function (ctx) {
     normal.sort(sortByStackLayer)
     compound.sort(sortByStackLayer)
   }
+  if (!this._intro) {
+    this._renderSlotPlaceholders(ctx, bx, by, L)
+  }
+
   var showBack = flipSt ? flipSt.showBack : (this._intro && this._intro.showBack)
   for (var n = 0; n < normal.length; n++) {
     this._renderGroup(ctx, normal[n], bx, by, L, false, showBack, flipSt)

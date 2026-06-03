@@ -34,5 +34,7 @@ module.exports = {
    * 道具次数是否与后端同步（GET /tools、POST grant、POST consume）。
    * 后端：honocloud-main/packages/booksnap/src/routes/jigsaw/tools.ts
    */
-  toolsApiEnabled: true
+  toolsApiEnabled: true,
+  /** 拼图页道具 / 时间耗尽加时 — 激励视频 */
+  rewardedAdUnitId: 'adunit-2c82047fdf284c77'
 }
