@@ -33,6 +33,22 @@
       {
         "value": "\\.md$",
         "type": "regexp"
+      },
+      {
+        "value": "images/icons/rank.png",
+        "type": "file"
+      },
+      {
+        "value": "images/icons/share.png",
+        "type": "file"
+      },
+      {
+        "value": "images/share/**",
+        "type": "glob"
+      },
+      {
+        "value": "tools/**",
+        "type": "glob"
       }
     ]
   },
