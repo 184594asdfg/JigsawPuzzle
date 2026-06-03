@@ -1,5 +1,6 @@
 /**
- * 用户登录与缓存
+ * 用户：仅静默登录（wx.login + 后端换 openid），不获取微信头像与昵称。
+ * 设置页只用固定展示名 + 同步状态文案，内部 userId 仅给接口用。
  */
 var config = require('./app-config')
 var request = require('./request')
@@ -31,15 +32,21 @@ function getUserId() {
   return user && user.id ? user.id : ''
 }
 
+/**
+ * 设置页展示（与静默登录一致，不出现「登录」按钮或真实头像昵称）
+ * @returns {{ name: string, subtitle: string }}
+ */
 function getDisplayInfo() {
-  var user = getUser()
-  if (!user || !user.id) {
-    return { name: '游客', id: '--' }
+  if (!getUserId()) {
+    return {
+      name: '吉吉玩家',
+      subtitle: '暂无法同步进度，请检查网络'
+    }
   }
-  var name = user.nickname || '吉'
-  var id = user.id
-  if (id.length > 8) id = id.slice(-8)
-  return { name: name, id: id }
+  return {
+    name: '吉吉玩家',
+    subtitle: '进度将自动保存'
+  }
 }
 
 function saveUser(remote) {

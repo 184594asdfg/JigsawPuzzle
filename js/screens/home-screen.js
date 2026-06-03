@@ -13,6 +13,7 @@ var prefetch = require('../../utils/prefetch')
 var sfx = require('../sfx')
 var pressAnim = require('../press-anim')
 var jigsawShape = require('../jigsaw-shape')
+var heroSliceSnap = require('../hero-slice-snap')
 
 var HOME_BG = 'images/home-bg.jpg'
 var HOME_HERO = 'images/home-hero.png'
@@ -185,9 +186,16 @@ function HomeScreen() {
   this._rankDrag = null
   this._sideButtonRects = {}
   this._pressAnim = null
+  this._pendingSliceUnlock = null
+  this._heroSliceSnap = null
+  this._homeInputLockUntil = 0
 }
 HomeScreen.prototype = Object.create(BaseScreen.prototype)
 HomeScreen.prototype.constructor = HomeScreen
+
+HomeScreen.prototype._isInputLocked = function () {
+  return this._homeInputLockUntil > 0 && Date.now() < this._homeInputLockUntil
+}
 
 HomeScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
@@ -208,11 +216,58 @@ HomeScreen.prototype.onResume = function () {
 //  更新
 // ---------------------------------------------------------------------------
 
+HomeScreen.prototype._resolveHeroTheme = function () {
+  var themeId = heroSliceSnap.snapThemeId(this)
+  if (themeId) {
+    var t = galleryData.getThemeById(themeId)
+    if (t) return t
+  }
+  var next = progress.getNextLevel(galleryData.getThemes())
+  return next && next.theme ? next.theme : null
+}
+
+HomeScreen.prototype._getThemeCoverUrl = function (theme) {
+  if (!theme) return ''
+  if (theme.imageFolder) return galleryData.buildThemeCoverUrl(theme.imageFolder)
+  return theme.themeImage || ''
+}
+
+HomeScreen.prototype._tryStartSliceSnap = function (layout) {
+  var pending = this._pendingSliceUnlock
+  if (!pending || pending.cellIndex < 0) return
+  var top = layout.topArea
+  if (!top || top.w <= 0) return
+
+  var theme = galleryData.getThemeById(pending.themeId)
+  var coverUrl = this._getThemeCoverUrl(theme)
+  var themeImg = coverUrl ? assets.get(coverUrl) : null
+  if (!themeImg) {
+    if (coverUrl) assets.tryLoad(coverUrl)
+    return
+  }
+
+  var W = layout.W
+  var H = layout.H
+  heroSliceSnap.start(this, {
+    cellIndex: pending.cellIndex,
+    topArea: top,
+    cols: HERO_GRID_COLS,
+    rows: HERO_GRID_ROWS,
+    fromX: W / 2,
+    fromY: H / 2,
+    coverImg: themeImg,
+    themeId: pending.themeId
+  })
+  this._pendingSliceUnlock = null
+}
+
 HomeScreen.prototype.update = function (dt) {
   if (this.showSettings) settingsModal.tickSettingsEnter(this, dt)
+  heroSliceSnap.tick(this)
   var tick = pressAnim.tickPressAnim(this._pressAnim, dt)
   this._pressAnim = tick.anim
   if (!tick.completed) return
+  if (heroSliceSnap.isAnimating(this) || this._isInputLocked()) return
   var id = tick.id
   if (id === 'settings') this._openSettings()
   else if (id === 'rank') this._openRank()
@@ -248,17 +303,6 @@ HomeScreen.prototype.render = function (ctx) {
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, W, H)
 
-  // 顶部品牌
-  ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.25)'
-  ctx.shadowBlur = rpx.rpx(16)
-  ctx.shadowOffsetY = rpx.rpx(4)
-  draw.fillTextCentered(
-    ctx, '吉吉拼图', W / 2, layout.brand.titleY,
-    '700 ' + rpx.rpx(48).toFixed(0) + 'px sans-serif', '#ffffff'
-  )
-  ctx.restore()
-
   var heroRect = layout.hero
   var hero = assets.get(HOME_HERO)
   if (hero && heroRect.w > 0) {
@@ -267,13 +311,17 @@ HomeScreen.prototype.render = function (ctx) {
 
   var topArea = layout.topArea
   if (heroRect.w > 0 && topArea.w > 0) {
+    if (this._pendingSliceUnlock && !heroSliceSnap.isAnimating(this)) {
+      this._tryStartSliceSnap(layout)
+    }
     this._drawTopArea(ctx, topArea.x, topArea.y, topArea.w, topArea.h)
+    heroSliceSnap.render(ctx, this)
 
-    var next = progress.getNextLevel(galleryData.getThemes())
+    var theme = this._resolveHeroTheme()
     var label = layout.themeLabel
-    if (next && next.theme && label.gapBottom > label.gapTop) {
+    if (theme && label.gapBottom > label.gapTop) {
       draw.fillTextCenteredSpacing(
-        ctx, next.theme.name, label.centerX, label.y,
+        ctx, theme.name, label.centerX, label.y,
         '400 ' + rpx.rpx(48).toFixed(0) + 'px sans-serif', '#663f1f',
         rpx.rpx(8)
       )
@@ -297,7 +345,8 @@ HomeScreen.prototype.render = function (ctx) {
   settingsModal.drawNavIcon(
     ctx, layout.nav.y, layout.nav.h, pressAnim.btnScale(anim, 'settings')
   )
-  if (!this.showSettings && !anim) {
+  if (!this.showSettings && !anim && !heroSliceSnap.isAnimating(this) &&
+    !this._isInputLocked()) {
     this.addHitZone(settingsModal.navHitRect(layout.nav.y, layout.nav.h, true), function () {
       self.showRank = false
       self._startPressAnim('settings')
@@ -349,12 +398,12 @@ HomeScreen.prototype._drawHeroCoverSlices = function (ctx, img, x, y, w, h, cols
  * hero 预览：25 格底色 + 已通关 X 关则显示 X 块封面切片。
  */
 HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
-  var next = progress.getNextLevel(galleryData.getThemes())
-  var theme = next && next.theme ? next.theme : null
+  var theme = this._resolveHeroTheme()
   var cols = HERO_GRID_COLS
   var rows = HERO_GRID_ROWS
   var revealed = theme ? progress.countThemeCompleted(theme) : 0
   if (revealed > HERO_GRID_CELLS) revealed = HERO_GRID_CELLS
+  if (heroSliceSnap.isAnimating(this) && revealed > 0) revealed -= 1
 
   ctx.save()
   draw.roundedRectPath(ctx, x, y, w, h, rpx.rpx(24))
@@ -362,12 +411,8 @@ HomeScreen.prototype._drawTopArea = function (ctx, x, y, w, h) {
   assets.tryLoad(HOME_HERO_GRID_BG)
   this._fillHeroGridCells(ctx, x, y, w, h, cols, rows)
 
-  var coverUrl = prefetch.getCurrentThemeCoverUrl()
-  if (!coverUrl && theme) {
-    coverUrl = theme.imageFolder
-      ? galleryData.buildThemeCoverUrl(theme.imageFolder)
-      : (theme.themeImage || '')
-  }
+  var coverUrl = this._getThemeCoverUrl(theme)
+  if (!coverUrl) coverUrl = prefetch.getCurrentThemeCoverUrl()
   var themeImg = coverUrl ? assets.get(coverUrl) : null
   if (!themeImg && coverUrl) assets.tryLoad(coverUrl)
 
@@ -454,7 +499,8 @@ HomeScreen.prototype._drawBottomBar = function (ctx, layout) {
   var gallery = layout.bottomBar.galleryBtn
   var self = this
   var anim = this._pressAnim
-  var blockHits = !!anim || this.showRank || this.showSettings
+  var blockHits = !!anim || this.showRank || this.showSettings ||
+    heroSliceSnap.isAnimating(this) || this._isInputLocked()
 
   if (SHOW_RANK_BTN) {
     this._drawSideIcon(
@@ -897,5 +943,24 @@ HomeScreen.prototype._startPuzzle = function () {
   tryOpen()
 }
 
+/**
+ * @param {{ cellIndex: number, themeId: string }|null} sliceUnlock
+ * @param {{ fromWin?: boolean }|null} opts
+ */
+HomeScreen.create = function (sliceUnlock, opts) {
+  var screen = new HomeScreen()
+  if (opts && opts.fromWin) {
+    screen._homeInputLockUntil = Date.now() + 700
+  }
+  if (sliceUnlock && sliceUnlock.cellIndex >= 0 && sliceUnlock.themeId) {
+    screen._pendingSliceUnlock = {
+      cellIndex: sliceUnlock.cellIndex,
+      themeId: sliceUnlock.themeId
+    }
+  }
+  return screen
+}
+
 HomeScreen.layoutHome = layoutHome
+HomeScreen.HERO_GRID_CELLS = HERO_GRID_CELLS
 module.exports = HomeScreen

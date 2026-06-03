@@ -14,6 +14,9 @@ var toolModal = require('../puzzle-tool-modal')
 var toolRewardFly = require('../tool-reward-fly')
 var addTimeAlarmFly = require('../add-time-alarm-fly')
 var timeupOverlay = require('../timeup-overlay')
+var winOverlay = require('../win-overlay')
+var galleryData = require('../../utils/gallery-data')
+var prefetch = require('../../utils/prefetch')
 var tools = require('../../utils/tools')
 var pressAnim = require('../press-anim')
 var sfx = require('../sfx')
@@ -89,7 +92,7 @@ function PuzzleScreen(opts) {
   this.showSettings = false
   this.toolModal = null
   this._navRect = null
-  this._successBtnRect = null
+  this._winFxMs = 0
   this._engineTouching = false
   this.countdownMs = 0
   this.countdownTotalMs = 0
@@ -102,6 +105,8 @@ function PuzzleScreen(opts) {
   this.showPreviewOverlay = false
   this.previewSessionMs = 0
   this._timeupFxMs = 0
+  this._winNewUnlock = false
+  this._winNavigatingHome = false
 }
 PuzzleScreen.prototype = Object.create(BaseScreen.prototype)
 PuzzleScreen.prototype.constructor = PuzzleScreen
@@ -111,6 +116,7 @@ PuzzleScreen.prototype.onEnter = function (manager) {
   settingsModal.preload()
   toolModal.preload()
   timeupOverlay.preload()
+  winOverlay.preload()
   assets.load(COUNTDOWN_ALARM_IMAGE)
   assets.load(PREVIEW_ICON_VIEWING)
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
@@ -143,6 +149,9 @@ PuzzleScreen.prototype._initEngine = function () {
   this.previewSessionMs = 0
   this.countdownEnded = false
   this._timeupFxMs = 0
+  this._winNewUnlock = false
+  this._winNavigatingHome = false
+  winOverlay.resetFx(this)
   tools.fetchTools()
   var limitMs = this.timeLimitSec > 0 ? this.timeLimitSec * 1000 : COUNTDOWN_DURATION_MS
   this.countdownTotalMs = limitMs
@@ -159,8 +168,12 @@ PuzzleScreen.prototype._initEngine = function () {
     grid: this.gridSize,
     image: this.imageSrc,
     onWin: function () {
+      var wasComplete = self.levelKey ? progress.isLevelComplete(self.levelKey) : true
       if (self.levelKey) progress.markLevelComplete(self.levelKey)
+      self._winNewUnlock = !!(self.levelKey && !wasComplete)
+      sfx.playWin()
       self.showSuccess = true
+      winOverlay.resetFx(self)
     },
     onAnyMove: function () {}
   })
@@ -222,6 +235,9 @@ PuzzleScreen.prototype.update = function (dt) {
   if (this.countdownEnded && !this.showSuccess) {
     timeupOverlay.tickFx(this, dt)
   }
+  if (this.showSuccess) {
+    winOverlay.tickFx(this, dt)
+  }
   var tick = pressAnim.tickPressAnim(this._pressAnim, dt)
   this._pressAnim = tick.anim
   if (tick.completed) {
@@ -240,10 +256,8 @@ PuzzleScreen.prototype.render = function (ctx) {
   ctx.fillStyle = PUZZLE_BG
   ctx.fillRect(0, 0, W, H)
 
-  // 导航
   var navY = rpx.safeTop()
   var navH = rpx.rpx(88)
-  this._drawNav(ctx, navY, navH, W)
 
   if (this.loading || !this.engine) {
     draw.fillTextCentered(
@@ -265,13 +279,26 @@ PuzzleScreen.prototype.render = function (ctx) {
     return
   }
 
+  var self = this
+
+  if (this.showSuccess) {
+    winOverlay.drawOverlay(this, ctx, W, H, {
+      onGoHome: function () {
+        sfx.playClick()
+        self._goHomeAfterWin()
+      }
+    })
+    return
+  }
+
+  this._drawNav(ctx, navY, navH, W)
+
   // 倒计时区域 + 棋盘
   var countdownH = rpx.rpx(COUNTDOWN_AREA_H_RPX)
   var countdownY = navY + navH + rpx.rpx(8)
   this._drawCountdown(ctx, W, countdownY, countdownH)
   this.engine.render(ctx)
 
-  var self = this
   this._drawBottomTools(ctx, W, H)
   toolRewardFly.render(ctx, this)
   addTimeAlarmFly.render(ctx, this)
@@ -280,13 +307,8 @@ PuzzleScreen.prototype.render = function (ctx) {
     this._drawPreviewOverlay(ctx, W, H)
   }
 
-  if (this.countdownEnded && !this.showSuccess) {
+  if (this.countdownEnded) {
     this._drawTimeUpOverlay(ctx, W, H)
-    return
-  }
-
-  if (this.showSuccess) {
-    this._drawSuccess(ctx, W, H)
     return
   }
 
@@ -700,11 +722,43 @@ PuzzleScreen.prototype._drawSettingsModal = function (ctx, W, H) {
   })
 }
 
-PuzzleScreen.prototype._goHome = function () {
+PuzzleScreen.prototype._resolveSliceUnlock = function () {
+  if (!this._winNewUnlock || !this.levelKey) return null
+  var lv = galleryData.getLevelByKey(this.levelKey)
+  if (!lv || !lv.themeId) return null
+  var theme = galleryData.getThemeById(lv.themeId)
+  if (!theme) return null
+  var n = progress.countThemeCompleted(theme)
+  if (n <= 0) return null
+  var cellIndex = n - 1
+  if (cellIndex >= HomeScreen.HERO_GRID_CELLS) {
+    cellIndex = HomeScreen.HERO_GRID_CELLS - 1
+  }
+  return { cellIndex: cellIndex, themeId: lv.themeId }
+}
+
+PuzzleScreen.prototype._goHomeWithSliceUnlock = function (sliceUnlock, opts) {
   this.showSettings = false
   settingsModal.clearSettingsEnter(this)
   this.showSuccess = false
-  this.manager.replace(new HomeScreen())
+  this._winNavigatingHome = true
+  if (this.engine) {
+    this.engine.destroy()
+    this.engine = null
+  }
+  prefetch.prefetchHomeAssets()
+  this.manager.replace(HomeScreen.create(sliceUnlock, opts))
+}
+
+PuzzleScreen.prototype._goHomeAfterWin = function () {
+  if (this._winNavigatingHome) return
+  var shrinkDone = (this._winFxMs != null ? this._winFxMs : 0) >= winOverlay.SHRINK_MS
+  if (!shrinkDone) return
+  this._goHomeWithSliceUnlock(this._resolveSliceUnlock(), { fromWin: true })
+}
+
+PuzzleScreen.prototype._goHome = function () {
+  this._goHomeWithSliceUnlock(null)
 }
 
 PuzzleScreen.prototype._openSettings = function () {
@@ -735,41 +789,8 @@ PuzzleScreen.prototype._closeSettings = function () {
   settingsModal.clearSettingsEnter(this)
 }
 
-PuzzleScreen.prototype._drawSuccess = function (ctx, W, H) {
-  this.resetHitZones()
-  ctx.fillStyle = 'rgba(0,0,0,0.6)'
-  ctx.fillRect(0, 0, W, H)
-
-  var modalW = W - rpx.rpx(80)
-  var modalH = rpx.rpx(440)
-  var modalX = (W - modalW) / 2
-  var modalY = (H - modalH) / 2
-  draw.fillRoundedRect(ctx, modalX, modalY, modalW, modalH, rpx.rpx(32), '#ffffff')
-
-  draw.fillTextCentered(
-    ctx, '🎉', modalX + modalW / 2, modalY + rpx.rpx(110),
-    '400 ' + rpx.rpx(80).toFixed(0) + 'px sans-serif', '#000'
-  )
-  draw.fillTextCentered(
-    ctx, '挑战成功！', modalX + modalW / 2, modalY + rpx.rpx(210),
-    '700 ' + rpx.rpx(40).toFixed(0) + 'px sans-serif', '#333'
-  )
-  draw.fillTextCentered(
-    ctx, '恭喜你完成了拼图', modalX + modalW / 2, modalY + rpx.rpx(270),
-    '400 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', '#666'
-  )
-
-  var btnW = modalW - rpx.rpx(80)
-  var btnH = rpx.rpx(88)
-  var btnX = modalX + (modalW - btnW) / 2
-  var btnY = modalY + modalH - btnH - rpx.rpx(40)
-  this._drawPrimaryButton(ctx, btnX, btnY, btnW, btnH, '再玩一次')
-  this._successBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH }
-  var self = this
-  this.addHitZone(this._successBtnRect, function () {
-    sfx.playClick()
-    self._initEngine()
-  })
+PuzzleScreen.prototype._goNextLevel = function () {
+  this._goHomeAfterWin()
 }
 
 // ---------------------------------------------------------------------------
@@ -791,6 +812,11 @@ PuzzleScreen.prototype._isOnEngine = function (x, y) {
 PuzzleScreen.prototype.onTouchStart = function (e) {
   var t = this._firstTouch(e)
   if (!t) return
+
+  if (this.showSuccess) {
+    this._engineTouching = false
+    return
+  }
 
   if (this.showPreviewOverlay) {
     this._engineTouching = false
@@ -815,6 +841,12 @@ PuzzleScreen.prototype.onTouchMove = function (e) {
 PuzzleScreen.prototype.onTouchEnd = function (e) {
   var t = this._firstTouch(e)
   if (!t) return
+
+  if (this.showSuccess) {
+    var winZone = this.hitZoneAt(t.x, t.y)
+    if (winZone && winZone.handler) winZone.handler()
+    return
+  }
 
   if (this.showPreviewOverlay) {
     sfx.playClick()

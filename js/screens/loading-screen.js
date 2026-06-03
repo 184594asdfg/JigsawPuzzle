@@ -1,23 +1,87 @@
 /**
- * 开场加载页：与游戏主界面统一的渐变背景 + 转圈加载 + 进度条
+ * 开场加载页：全屏背景图 + 转圈加载 + 进度条
  */
 var rpx = require('../rpx')
 var draw = require('../draw')
+var assets = require('../assets')
+
+/** 加载页全屏背景图；可改为 images/loading-bg.jpg 使用单独切图 */
+var LOADING_BG = 'images/home-bg.jpg'
+/** 顶部 Logo（透明 PNG），屏上宽度为画布宽度的 80%，高度按原图比例 */
+var LOADING_LOGO = 'images/loading-logo.png'
 
 var SPINNER_R_RPX = 40
 var SPINNER_TRACK_RPX = 5
 var SPINNER_ARC_RPX = 6
 var BAR_W_RPX = 420
 var BAR_H_RPX = 12
-var TITLE_TOP_OFFSET_RPX = 120
+/** Logo 顶边距安全区下沿（rpx） */
+var LOGO_TOP_RPX = 88
+/** 相对屏宽（0～1），与 rpx 基准 750 下 80% 一致 */
+var LOGO_WIDTH_RATIO = 0.8
+/** 加载区距屏幕底 + 安全区（rpx） */
+var LOADING_BOTTOM_PAD_RPX = 56
 
-function fillGameGradient(ctx, W, H) {
+function fillFallbackGradient(ctx, W, H) {
   var grad = ctx.createLinearGradient(0, 0, W * 0.6, H)
   grad.addColorStop(0, '#5b6fd8')
   grad.addColorStop(0.45, '#6d5b9e')
   grad.addColorStop(1, '#764ba2')
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, W, H)
+}
+
+function drawLogo(ctx, W) {
+  var img = assets.get(LOADING_LOGO)
+  if (!img || !img.width) {
+    assets.tryLoad(LOADING_LOGO)
+    return
+  }
+  var w = W * LOGO_WIDTH_RATIO
+  var h = w * (img.height / img.width)
+  var x = (W - w) / 2
+  var y = rpx.safeTop() + rpx.rpx(LOGO_TOP_RPX)
+  ctx.drawImage(img, x, y, w, h)
+}
+
+function drawBackground(ctx, W, H) {
+  var bg = assets.get(LOADING_BG)
+  if (!bg) {
+    assets.tryLoad(LOADING_BG)
+    fillFallbackGradient(ctx, W, H)
+    return
+  }
+  draw.drawImageCover(ctx, bg, 0, 0, W, H)
+  ctx.fillStyle = 'rgba(0,0,0,0.18)'
+  ctx.fillRect(0, 0, W, H)
+}
+
+/** 自底向上：百分比 → 文案 → 进度条 → 转圈 */
+function layoutLoadingFooter(W, H) {
+  var cx = W / 2
+  var floor = H - rpx.safeBottom() - rpx.rpx(LOADING_BOTTOM_PAD_RPX)
+  var hintSize = rpx.rpx(26)
+  var pctSize = rpx.rpx(22)
+  var barH = rpx.rpx(BAR_H_RPX)
+  var barW = W * LOGO_WIDTH_RATIO
+  var spinnerR = rpx.rpx(SPINNER_R_RPX)
+
+  var percentY = floor - pctSize * 0.5
+  var hintY = percentY - pctSize * 0.5 - rpx.rpx(20) - hintSize * 0.5
+  var barBottom = hintY - hintSize * 0.5 - rpx.rpx(28)
+  var barY = barBottom - barH
+  var spinnerCy = barY - rpx.rpx(44) - spinnerR
+
+  return {
+    cx: cx,
+    barX: (W - barW) / 2,
+    barY: barY,
+    barW: barW,
+    barH: barH,
+    hintY: hintY,
+    percentY: percentY,
+    spinnerCy: spinnerCy
+  }
 }
 
 function drawSpinner(ctx, cx, cy, angle) {
@@ -56,61 +120,51 @@ function render(ctx, state, alpha) {
 
   var W = rpx.windowWidth()
   var H = rpx.windowHeight()
-  var cx = W / 2
-  var contentY = H * 0.52
+  var footer = layoutLoadingFooter(W, H)
+  var progress = Math.max(0, Math.min(1, state.progress || 0))
+  var radius = footer.barH / 2
 
   ctx.save()
   ctx.globalAlpha = alpha
 
-  fillGameGradient(ctx, W, H)
+  drawBackground(ctx, W, H)
+  drawLogo(ctx, W)
 
-  var topGrad = ctx.createLinearGradient(0, 0, 0, H * 0.35)
-  topGrad.addColorStop(0, 'rgba(0,0,0,0.12)')
-  topGrad.addColorStop(1, 'rgba(0,0,0,0)')
-  ctx.fillStyle = topGrad
-  ctx.fillRect(0, 0, W, H * 0.35)
+  drawSpinner(ctx, footer.cx, footer.spinnerCy, state.spinner || 0)
 
-  var titleY = rpx.safeTop() + rpx.rpx(TITLE_TOP_OFFSET_RPX)
-  ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.28)'
-  ctx.shadowBlur = rpx.rpx(14)
-  ctx.shadowOffsetY = rpx.rpx(4)
-  draw.fillTextCentered(
-    ctx, '吉吉拼图', cx, titleY,
-    '700 ' + rpx.rpx(52).toFixed(0) + 'px sans-serif', '#ffffff'
+  draw.fillRoundedRect(
+    ctx, footer.barX, footer.barY, footer.barW, footer.barH, radius, 'rgba(255,255,255,0.2)'
   )
-  ctx.restore()
-
-  drawSpinner(ctx, cx, contentY, state.spinner || 0)
-
-  var barW = Math.min(W - rpx.rpx(80), rpx.rpx(BAR_W_RPX))
-  var barH = rpx.rpx(BAR_H_RPX)
-  var barX = (W - barW) / 2
-  var barY = contentY + rpx.rpx(72)
-  var radius = barH / 2
-  var progress = Math.max(0, Math.min(1, state.progress || 0))
-
-  draw.fillRoundedRect(ctx, barX, barY, barW, barH, radius, 'rgba(255,255,255,0.2)')
   if (progress > 0.02) {
-    var fillW = Math.max(barH, barW * progress)
-    draw.fillRoundedRect(ctx, barX, barY, fillW, barH, radius, 'rgba(255,255,255,0.92)')
+    var fillW = Math.max(footer.barH, footer.barW * progress)
+    draw.fillRoundedRect(
+      ctx, footer.barX, footer.barY, fillW, footer.barH, radius, 'rgba(255,255,255,0.92)'
+    )
   }
 
   var hint = state.hint || '加载中...'
   draw.fillTextCentered(
-    ctx, hint, cx, barY + barH + rpx.rpx(36),
+    ctx, hint, footer.cx, footer.hintY,
     '400 ' + rpx.rpx(26).toFixed(0) + 'px sans-serif', 'rgba(255,255,255,0.88)'
   )
   draw.fillTextCentered(
-    ctx, Math.floor(progress * 100) + '%', cx, barY + barH + rpx.rpx(72),
+    ctx, Math.floor(progress * 100) + '%', footer.cx, footer.percentY,
     '600 ' + rpx.rpx(22).toFixed(0) + 'px sans-serif', 'rgba(255,255,255,0.65)'
   )
 
   ctx.restore()
 }
 
+function preload() {
+  assets.load(LOADING_BG).catch(function () {})
+  assets.load(LOADING_LOGO).catch(function () {})
+}
+
 module.exports = {
+  LOADING_BG: LOADING_BG,
+  LOADING_LOGO: LOADING_LOGO,
+  preload: preload,
   update: update,
   render: render,
-  fillGameGradient: fillGameGradient
+  fillFallbackGradient: fillFallbackGradient
 }

@@ -6,7 +6,20 @@ var settings = require('../utils/settings')
 var SRC = {
   click: 'audio/click.mp3',
   intro_deal: 'audio/intro_deal.mp3',
-  intro_flip: 'audio/intro_flip.mp3'
+  intro_flip: 'audio/intro_flip.mp3',
+  /** 关卡通关（拼图胜利） */
+  win: 'audio/win.mp3'
+}
+
+/**
+ * 播放音量（0~1）。微信 InnerAudioContext 无分贝 API，用线性音量调节。
+ * 素材建议在 DAW 里峰值约 -6dBFS，再由此处微调与 click / move 平衡。
+ */
+var VOLUME = {
+  click: 0.65,
+  intro_deal: 0.75,
+  intro_flip: 0.75,
+  win: 0.85
 }
 
 var pool = {}
@@ -19,6 +32,8 @@ function ensure(key) {
     var a = wx.createInnerAudioContext()
     a.src = src
     a.obeyMuteSwitch = false
+    var vol = VOLUME[key]
+    a.volume = vol != null ? vol : 1
     pool[key] = a
   } catch (e) {
     pool[key] = null
@@ -49,6 +64,10 @@ function playIntroFlip() {
   play('intro_flip')
 }
 
+function playWin() {
+  play('win')
+}
+
 function wrapClick(fn) {
   return function () {
     playClick()
@@ -57,8 +76,11 @@ function wrapClick(fn) {
 }
 
 module.exports = {
+  SRC: SRC,
+  VOLUME: VOLUME,
   playClick: playClick,
   playIntroDeal: playIntroDeal,
   playIntroFlip: playIntroFlip,
+  playWin: playWin,
   wrapClick: wrapClick
 }

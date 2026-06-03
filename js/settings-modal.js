@@ -260,11 +260,13 @@ function drawOverlay(screen, ctx, modal, handlers, canInteract) {
     '700 ' + Math.round(ul.name.font * sx) + 'px sans-serif', ul.name.color
   )
 
-  draw.fillTextCentered(
-    ctx, 'id:' + display.id,
-    modal.x + modal.w / 2, modal.y + ul.userId.y * sx,
-    '600 ' + Math.round(ul.userId.font * sx) + 'px sans-serif', ul.userId.color
-  )
+  if (display.subtitle) {
+    draw.fillTextCentered(
+      ctx, display.subtitle,
+      modal.x + modal.w / 2, modal.y + ul.userId.y * sx,
+      '600 ' + Math.round(ul.userId.font * sx) + 'px sans-serif', ul.userId.color
+    )
+  }
 
   for (var i = 0; i < ICON_ROWS.length; i++) {
     drawIconRow(screen, ctx, modal, ICON_ROWS[i], onToggle, canInteract)

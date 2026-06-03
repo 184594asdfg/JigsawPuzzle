@@ -165,6 +165,40 @@ function findFirstPlayableLevel(themes) {
   return next
 }
 
+/** 指定关卡 key 的下一关（同主题 +1，否则下一主题第 1 关） */
+function getLevelAfterKey(themes, levelKey) {
+  if (!themes || !themes.length || !levelKey) return null
+  var lv = galleryData.getLevelByKey(levelKey)
+  var theme = null
+  var levelNum = 0
+  if (lv && lv.themeId) {
+    theme = galleryData.getThemeById(lv.themeId)
+    levelNum = lv.level
+  }
+  if (!theme || !levelNum) {
+    var idx = levelKey.lastIndexOf('_')
+    if (idx <= 0) return null
+    theme = galleryData.getThemeById(levelKey.slice(0, idx))
+    levelNum = parseInt(levelKey.slice(idx + 1), 10)
+  }
+  if (!theme || !levelNum || isNaN(levelNum)) return null
+  var total = getThemeLevelTotal(theme)
+  if (levelNum < total) {
+    return { theme: theme, level: resolveLevel(theme, levelNum + 1) }
+  }
+  for (var i = 0; i < themes.length; i++) {
+    if (themes[i].id !== theme.id) continue
+    if (i + 1 < themes.length) {
+      var nextTheme = themes[i + 1]
+      var nextTotal = getThemeLevelTotal(nextTheme)
+      if (!nextTotal) return null
+      return { theme: nextTheme, level: resolveLevel(nextTheme, 1) }
+    }
+    break
+  }
+  return null
+}
+
 /** 当前可玩关卡的下一关（同主题下一编号，否则下一主题第 1 关） */
 function getLevelAfterCurrent(themes) {
   if (!themes || !themes.length) return null
@@ -197,5 +231,6 @@ module.exports = {
   countAllCompleted: countAllCompleted,
   getNextLevel: getNextLevel,
   findFirstPlayableLevel: findFirstPlayableLevel,
+  getLevelAfterKey: getLevelAfterKey,
   getLevelAfterCurrent: getLevelAfterCurrent
 }

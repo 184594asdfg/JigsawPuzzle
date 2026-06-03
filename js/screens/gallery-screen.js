@@ -2,8 +2,8 @@
  * 图集：
  *   - 默认显示主题列表（3 列，按解锁状态切换卡片）
  *   - 点击主题进入关卡详情（3 列缩略图，已完成显示原图，未完成显示占位 + 脉冲）
- *   - 点击已完成关卡 → 全屏预览；点击未完成 → 进入拼图关卡
- *   - 返回：先出全屏 → 详情 → 主题列表 → 上层场景
+ *   - 点击已完成关卡 → 遮罩浮层预览大图；点击占位图 → 仅按压动效，无其它操作
+ *   - 返回：先关预览 → 详情 → 主题列表 → 上层场景
  */
 var BaseScreen = require('./base-screen')
 var rpx = require('../rpx')
@@ -29,8 +29,8 @@ function GalleryScreen() {
   this.currentTheme = null
   this.themes = []
   this.dataLoading = false
-  this.showFullscreen = false
-  this.fullscreenImage = ''
+  this.showImagePreview = false
+  this.previewImage = ''
   this.pulseKey = ''
   this._pulseTime = 0
   this.scrollY = 0
@@ -210,9 +210,8 @@ GalleryScreen.prototype.render = function (ctx) {
 
   this._scrollMax = Math.max(0, contentBottom - (bodyY + bodyH))
 
-  // 全屏预览
-  if (this.showFullscreen) {
-    this._drawFullscreen(ctx, W, H)
+  if (this.showImagePreview) {
+    this._drawImagePreview(ctx, W, H)
   }
 }
 
@@ -241,7 +240,7 @@ GalleryScreen.prototype._drawNav = function (ctx, x, y, w, h) {
   var self = this
   var anim = this._pressAnim
   var backRect = this._drawNavBack(ctx, y, h, pressAnim.btnScale(anim, 'back'))
-  if (!anim && !this.showFullscreen) {
+  if (!anim && !this.showImagePreview) {
     this.addHitZone(backRect, function () { self._startPressAnim('back') })
   }
 
@@ -397,25 +396,42 @@ GalleryScreen.prototype._drawLevelCard = function (ctx, level, x, y, w, h) {
   )
 }
 
-GalleryScreen.prototype._drawFullscreen = function (ctx, W, H) {
-  ctx.fillStyle = '#000000'
-  ctx.fillRect(0, 0, W, H)
-  var img = assets.get(this.fullscreenImage)
-  if (img) draw.drawImageContain(ctx, img, 0, 0, W, H)
-
-  // 关闭按钮
-  var closeX = W - rpx.rpx(56)
-  var closeY = rpx.safeTop() + rpx.rpx(48)
-  draw.fillTextCentered(
-    ctx, '×', closeX, closeY,
-    '400 ' + rpx.rpx(48).toFixed(0) + 'px sans-serif', '#ffffff'
-  )
-  // 全屏点击/关闭按钮，都关
+GalleryScreen.prototype._drawImagePreview = function (ctx, W, H) {
   var self = this
   this.resetHitZones()
-  this.addHitZone(
-    { x: 0, y: 0, w: W, h: H },
-    function () { self._closeFullscreen() }
+
+  ctx.fillStyle = 'rgba(0,0,0,0.72)'
+  ctx.fillRect(0, 0, W, H)
+  this.addHitZone({ x: 0, y: 0, w: W, h: H }, function () {
+    self._closeImagePreview()
+  })
+
+  var pad = rpx.rpx(40)
+  var top = rpx.safeTop() + rpx.rpx(100)
+  var bottom = H - rpx.safeBottom() - rpx.rpx(120)
+  var maxW = W - pad * 2
+  var maxH = bottom - top
+  if (maxH < rpx.rpx(200)) maxH = H * 0.55
+
+  var src = this.previewImage
+  var img = src ? assets.get(src) : null
+  if (!img && src) assets.tryLoad(src)
+  if (img && img.width && img.height) {
+    var ratio = img.width / img.height
+    var drawW = maxW
+    var drawH = drawW / ratio
+    if (drawH > maxH) {
+      drawH = maxH
+      drawW = drawH * ratio
+    }
+    var ix = (W - drawW) / 2
+    var iy = top + (maxH - drawH) / 2
+    ctx.drawImage(img, ix, iy, drawW, drawH)
+  }
+
+  draw.fillTextCentered(
+    ctx, '点击空白处关闭', W / 2, H - rpx.safeBottom() - rpx.rpx(56),
+    '400 ' + rpx.rpx(24).toFixed(0) + 'px sans-serif', 'rgba(255,255,255,0.75)'
   )
 }
 
@@ -426,7 +442,7 @@ GalleryScreen.prototype._drawFullscreen = function (ctx, W, H) {
 GalleryScreen.prototype.onTouchStart = function (e) {
   var t = this._firstTouch(e)
   if (!t) return
-  if (this.showFullscreen) return
+  if (this.showImagePreview) return
 
   var navH = rpx.rpx(88)
   var bodyY = rpx.safeTop() + navH
@@ -462,9 +478,9 @@ GalleryScreen.prototype.onTouchEnd = function (e) {
     if (Math.abs(dy) > 12) return
   }
 
-  if (this.showFullscreen) {
-    var zoneFs = this.hitZoneAt(t.x, t.y)
-    if (zoneFs && zoneFs.handler) zoneFs.handler()
+  if (this.showImagePreview) {
+    var zonePreview = this.hitZoneAt(t.x, t.y)
+    if (zonePreview && zonePreview.handler) zonePreview.handler()
     return
   }
 
@@ -492,14 +508,14 @@ GalleryScreen.prototype.onTouchCancel = function () {
 // ---------------------------------------------------------------------------
 
 GalleryScreen.prototype._startPressAnim = function (id) {
-  if (this._pressAnim || this.showFullscreen) return
+  if (this._pressAnim || this.showImagePreview) return
   sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
 }
 
 GalleryScreen.prototype._onBack = function () {
-  if (this.showFullscreen) {
-    this._closeFullscreen()
+  if (this.showImagePreview) {
+    this._closeImagePreview()
     return
   }
   if (this.selectedTheme) {
@@ -514,6 +530,7 @@ GalleryScreen.prototype._onBack = function () {
 }
 
 GalleryScreen.prototype._onTapTheme = function (item) {
+  sfx.playClick()
   if (!item.unlocked) {
     wx.showToast({ title: '请先通关上一主题', icon: 'none' })
     return
@@ -525,51 +542,30 @@ GalleryScreen.prototype._onTapTheme = function (item) {
 }
 
 GalleryScreen.prototype._onTapLevel = function (level) {
-  if (!level || !level.key) {
-    try { wx.showToast({ title: '关卡数据无效', icon: 'none' }) } catch (e) {}
-    return
-  }
-  var self = this
-  function open(lv) {
-    if (!lv || !lv.key) {
-      try { wx.showToast({ title: '关卡数据无效', icon: 'none' }) } catch (e) {}
-      return
-    }
-    var resolved = galleryData.resolveLevelForPlay(lv.themeId, lv.key, lv.level, lv)
-    if (lv.done) {
-      if (!resolved.image) {
-        try { wx.showToast({ title: '图片加载中', icon: 'none' }) } catch (e) {}
-        return
-      }
-      if (!assets.get(resolved.image)) assets.tryLoad(resolved.image)
-      self.showFullscreen = true
-      self.fullscreenImage = resolved.image
-      return
-    }
-    if (!resolved.image) {
-      try { wx.showToast({ title: '关卡图片地址缺失', icon: 'none' }) } catch (e) {}
-      return
-    }
-    self.pulseKey = resolved.key
-    self._pulseTime = 0
-    prefetch.enterPuzzleWhenReady(self.manager, resolved, 320)
-  }
+  sfx.playClick()
+  if (!level || !level.key) return
 
-  if (level.done) {
-    open(level)
+  this.pulseKey = level.key
+  this._pulseTime = 0
+
+  if (!level.done) return
+
+  var resolved = galleryData.resolveLevelForPlay(
+    level.themeId, level.key, level.level, level
+  )
+  if (!resolved.image) {
+    try { wx.showToast({ title: '图片加载中', icon: 'none' }) } catch (e) {}
     return
   }
-  galleryData.ensureThemeLevels(level.themeId).then(function () {
-    open(galleryData.getLevelByKey(level.key) || level)
-  }).catch(function () {
-    open(level)
-  })
+  if (!assets.get(resolved.image)) assets.tryLoad(resolved.image)
+  this.showImagePreview = true
+  this.previewImage = resolved.image
 }
 
-GalleryScreen.prototype._closeFullscreen = function () {
+GalleryScreen.prototype._closeImagePreview = function () {
   sfx.playClick()
-  this.showFullscreen = false
-  this.fullscreenImage = ''
+  this.showImagePreview = false
+  this.previewImage = ''
 }
 
 module.exports = GalleryScreen

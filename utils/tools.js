@@ -1,6 +1,8 @@
 /**
  * 拼图道具次数（全局，新用户各 3 次）
+ * toolsApiEnabled=false 时仅本地计数，不请求 /jigsaw/tools/*
  */
+var config = require('./app-config')
 var jigsawApi = require('./jigsaw-api')
 var user = require('./user')
 
@@ -18,6 +20,17 @@ var DEFAULT_TOOLS = {
 
 var cached = null
 
+function ensureLocalCache() {
+  if (!cached) {
+    cached = {
+      addTimeRemain: DEFAULT_TOOLS.addTimeRemain,
+      hintRemain: DEFAULT_TOOLS.hintRemain,
+      previewRemain: DEFAULT_TOOLS.previewRemain
+    }
+  }
+  return cached
+}
+
 function applyData(data) {
   if (!data) {
     cached = null
@@ -31,6 +44,35 @@ function applyData(data) {
   return cached
 }
 
+function localRemain(action) {
+  var c = ensureLocalCache()
+  if (action === 'addTime') return c.addTimeRemain
+  if (action === 'hint') return c.hintRemain
+  if (action === 'preview') return c.previewRemain
+  return 0
+}
+
+function localConsume(action) {
+  var c = ensureLocalCache()
+  var key = action === 'addTime' ? 'addTimeRemain'
+    : action === 'hint' ? 'hintRemain'
+      : action === 'preview' ? 'previewRemain' : null
+  if (!key || c[key] <= 0) {
+    return Promise.reject(new Error('次数不足'))
+  }
+  c[key] -= 1
+  return Promise.resolve(cached)
+}
+
+function localGrant(action, delta) {
+  var c = ensureLocalCache()
+  var d = delta > 0 ? delta : 1
+  if (action === 'addTime') c.addTimeRemain += d
+  else if (action === 'hint') c.hintRemain += d
+  else if (action === 'preview') c.previewRemain += d
+  return Promise.resolve(cached)
+}
+
 function fetchTools() {
   var userId = user.getUserId()
   if (!userId) {
@@ -41,16 +83,12 @@ function fetchTools() {
     }
     return Promise.resolve(cached)
   }
+  if (!config.toolsApiEnabled) {
+    return Promise.resolve(ensureLocalCache())
+  }
   return jigsawApi.fetchTools(userId).then(applyData).catch(function (err) {
     console.warn('[tools] fetch failed', err)
-    if (!cached) {
-      cached = {
-        addTimeRemain: DEFAULT_TOOLS.addTimeRemain,
-        hintRemain: DEFAULT_TOOLS.hintRemain,
-        previewRemain: DEFAULT_TOOLS.previewRemain
-      }
-    }
-    return cached
+    return ensureLocalCache()
   })
 }
 
@@ -61,31 +99,36 @@ function getCached() {
 function getRemain(action) {
   if (!user.getUserId()) return 0
   if (!cached) return 0
-  if (action === 'addTime') return cached.addTimeRemain
-  if (action === 'hint') return cached.hintRemain
-  if (action === 'preview') return cached.previewRemain
-  return 0
+  return localRemain(action)
 }
 
 function grant(action, source) {
-  var userId = user.getUserId()
-  var toolType = ACTION_TO_API[action]
-  if (!userId || !toolType) {
+  if (!user.getUserId()) {
     return Promise.reject(new Error('未登录'))
   }
-  return jigsawApi.grantTool(userId, toolType, source || 'ad').then(function (data) {
+  if (!ACTION_TO_API[action]) {
+    return Promise.reject(new Error('未知道具'))
+  }
+  if (!config.toolsApiEnabled) {
+    return localGrant(action, 1)
+  }
+  return jigsawApi.grantTool(user.getUserId(), ACTION_TO_API[action], source || 'ad').then(function (data) {
     if (!data) return Promise.reject(new Error('未登录'))
     return applyData(data)
   })
 }
 
 function consume(action) {
-  var userId = user.getUserId()
-  var toolType = ACTION_TO_API[action]
-  if (!userId || !toolType) {
+  if (!user.getUserId()) {
     return Promise.reject(new Error('未登录'))
   }
-  return jigsawApi.consumeTool(userId, toolType).then(function (data) {
+  if (!ACTION_TO_API[action]) {
+    return Promise.reject(new Error('未知道具'))
+  }
+  if (!config.toolsApiEnabled) {
+    return localConsume(action)
+  }
+  return jigsawApi.consumeTool(user.getUserId(), ACTION_TO_API[action]).then(function (data) {
     if (!data) return Promise.reject(new Error('未登录'))
     return applyData(data)
   })

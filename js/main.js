@@ -40,6 +40,7 @@ GameGlobal._jp = { canvas: canvas, ctx: ctx, width: W, height: H, dpr: DPR }
 
 var CORE_ASSETS = [
   'images/home-bg.jpg',
+  loadingScreen.LOADING_LOGO,
   'images/home-hero.png',
   'images/home-hero-grid-bg.png',
   'images/icons/rank.png',
@@ -192,6 +193,7 @@ function loop(ts) {
 requestAnimationFrame(loop)
 
 settings.init()
+loadingScreen.preload()
 
 Promise.all([
   preloadAssets(),
