@@ -1,84 +1,159 @@
 /**
- * 关卡进度：本地缓存 + 服务端同步
+ * 关卡进度：completed_count（线性）+ 服务端同步
  */
 var jigsawApi = require('./jigsaw-api')
 var user = require('./user')
 var galleryData = require('./gallery-data')
 
-var STORAGE_PROGRESS = 'puzzle_level_progress'
-var progressMap = null
+var STORAGE_PROGRESS = 'puzzle_progress_v2'
+var LEGACY_STORAGE = 'puzzle_level_progress'
+var completedCount = 0
+var lastCompletedAt = null
+var totalLevels = 0
 var synced = false
 
-function readLocalMap() {
+function clearLegacyStorage() {
+  try {
+    wx.removeStorageSync(LEGACY_STORAGE)
+  } catch (e) {}
+}
+
+function readLocal() {
   try {
     var raw = wx.getStorageSync(STORAGE_PROGRESS)
-    return raw && typeof raw === 'object' ? raw : {}
+    if (!raw || typeof raw !== 'object') return null
+    return raw
   } catch (e) {
-    return {}
+    return null
   }
 }
 
-function writeLocalMap(map) {
-  wx.setStorageSync(STORAGE_PROGRESS, map)
+function writeLocal() {
+  wx.setStorageSync(STORAGE_PROGRESS, {
+    completedCount: completedCount,
+    lastCompletedAt: lastCompletedAt
+  })
 }
 
-function ensureMap() {
-  if (!progressMap) progressMap = readLocalMap()
-  return progressMap
-}
-
-function mergeServerProgress(data) {
-  var keys = (data && data.completedKeys) ? data.completedKeys.slice() : []
-  if (!keys.length && data && data.progress) {
-    keys = Object.keys(data.progress).filter(function (k) {
-      return !!data.progress[k]
-    })
-  }
-  var map = {}
-  for (var i = 0; i < keys.length; i++) {
-    map[keys[i]] = true
-  }
-  progressMap = map
-  writeLocalMap(map)
+function applyServerData(data) {
+  completedCount = Math.max(0, (data && data.completedCount) || 0)
+  lastCompletedAt = (data && data.lastCompletedAt) ? data.lastCompletedAt : null
+  if (data && data.totalLevels > 0) totalLevels = data.totalLevels
+  writeLocal()
   synced = true
-  return map
+}
+
+function computeTotalFromThemes(themes) {
+  if (totalLevels > 0) return totalLevels
+  if (!themes || !themes.length) return 0
+  var n = 0
+  for (var i = 0; i < themes.length; i++) {
+    n += getThemeLevelTotal(themes[i])
+  }
+  return n
+}
+
+/** 通关本关是否会推进进度（应用 mark 之前调用） */
+function willAdvanceOnComplete(levelKey) {
+  ensureLoaded()
+  var globalIndex = getGlobalIndexForKey(galleryData.getThemes(), levelKey)
+  return globalIndex > 0 && globalIndex === completedCount + 1
+}
+
+/** 首页主按钮文案：全通后显示「再玩」 */
+function getMainLevelLabel(themes) {
+  ensureLoaded()
+  var total = computeTotalFromThemes(themes || galleryData.getThemes())
+  if (total > 0 && completedCount >= total) return '再玩'
+  return String(completedCount + 1)
+}
+
+function isAllLevelsComplete(themes) {
+  var total = computeTotalFromThemes(themes || galleryData.getThemes())
+  return total > 0 && completedCount >= total
+}
+
+function ensureLoaded() {
+  if (synced) return
+  var local = readLocal()
+  if (local) {
+    completedCount = Math.max(0, local.completedCount || 0)
+    lastCompletedAt = local.lastCompletedAt || null
+  }
+}
+
+function getGlobalIndexForKey(themes, levelKey) {
+  if (!themes || !themes.length || !levelKey) return 0
+  var idx = 0
+  for (var i = 0; i < themes.length; i++) {
+    var theme = themes[i]
+    var total = getThemeLevelTotal(theme)
+    for (var levelNum = 1; levelNum <= total; levelNum++) {
+      idx++
+      var key = galleryData.buildLevelKey(theme.id, levelNum)
+      if (key === levelKey) return idx
+    }
+  }
+  return 0
 }
 
 function loadFromServer() {
+  clearLegacyStorage()
+  ensureLoaded()
   var userId = user.getUserId()
-  if (!userId) {
-    ensureMap()
-    return Promise.resolve(ensureMap())
-  }
+  if (!userId) return Promise.resolve(completedCount)
   return jigsawApi.fetchProgress(userId).then(function (data) {
-    return mergeServerProgress(data)
+    applyServerData(data)
+    return completedCount
   }).catch(function (err) {
     console.warn('[progress] load from server failed', err)
-    ensureMap()
-    return progressMap
+    return completedCount
   })
 }
 
 function markLevelComplete(levelKey) {
   if (!levelKey) return
-  var map = ensureMap()
-  var alreadyDone = !!map[levelKey]
-  map[levelKey] = true
-  writeLocalMap(map)
-  try {
-    require('./prefetch').resetPrefetchCache()
-  } catch (e) {}
+  ensureLoaded()
+  var themes = galleryData.getThemes()
+  var globalIndex = getGlobalIndexForKey(themes, levelKey)
+  var isNext = globalIndex === completedCount + 1
+  var prevCount = completedCount
+  var prevTime = lastCompletedAt
+
+  if (isNext) {
+    completedCount += 1
+    lastCompletedAt = new Date().toISOString()
+    writeLocal()
+    try {
+      require('./prefetch').resetPrefetchCache()
+    } catch (e) {}
+  }
 
   var userId = user.getUserId()
   if (!userId) return
-  if (alreadyDone) return
-  jigsawApi.saveProgress(userId, levelKey).catch(function (err) {
+  jigsawApi.saveProgress(userId, levelKey).then(function (data) {
+    if (!data) return
+    applyServerData(data)
+  }).catch(function (err) {
     console.warn('[progress] save to server failed', err)
+    if (isNext) {
+      completedCount = prevCount
+      lastCompletedAt = prevTime
+      writeLocal()
+    }
   })
 }
 
 function isLevelComplete(levelKey) {
-  return !!ensureMap()[levelKey]
+  ensureLoaded()
+  var themes = galleryData.getThemes()
+  var globalIndex = getGlobalIndexForKey(themes, levelKey)
+  return globalIndex > 0 && globalIndex <= completedCount
+}
+
+function getCompletedCount() {
+  ensureLoaded()
+  return completedCount
 }
 
 function getThemeLevelTotal(theme) {
@@ -109,22 +184,26 @@ function resolveLevel(theme, levelNum) {
 }
 
 function countThemeCompleted(theme) {
+  ensureLoaded()
   if (!theme) return 0
   var total = getThemeLevelTotal(theme)
-  var n = 0
-  for (var i = 1; i <= total; i++) {
-    if (isLevelComplete(galleryData.buildLevelKey(theme.id, i))) n++
+  var themes = galleryData.getThemes()
+  if (!themes.length) return 0
+  var themeStart = 0
+  for (var t = 0; t < themes.length; t++) {
+    if (themes[t].id === theme.id) {
+      if (completedCount >= themeStart + total) return total
+      if (completedCount <= themeStart) return 0
+      return completedCount - themeStart
+    }
+    themeStart += getThemeLevelTotal(themes[t])
   }
-  return n
+  return 0
 }
 
 function countAllCompleted(themes) {
-  if (!themes || !themes.length) return 0
-  var n = 0
-  for (var i = 0; i < themes.length; i++) {
-    n += countThemeCompleted(themes[i])
-  }
-  return n
+  ensureLoaded()
+  return completedCount
 }
 
 function getNextLevel(themes) {
@@ -135,17 +214,16 @@ function getNextLevel(themes) {
     var total = getThemeLevelTotal(theme)
     if (!total) continue
     for (var levelNum = 1; levelNum <= total; levelNum++) {
-      var lv = resolveLevel(theme, levelNum)
-      if (!lv || !lv.key) continue
-      if (!isLevelComplete(lv.key)) {
+      globalIdx++
+      if (globalIdx > completedCount) {
+        var lv = resolveLevel(theme, levelNum)
         return {
           theme: theme,
           level: lv,
           levelIndex: levelNum - 1,
-          globalIndex: globalIdx
+          globalIndex: globalIdx - 1
         }
       }
-      globalIdx++
     }
   }
   var firstTheme = themes[0]
@@ -165,7 +243,6 @@ function findFirstPlayableLevel(themes) {
   return next
 }
 
-/** 指定关卡 key 的下一关（同主题 +1，否则下一主题第 1 关） */
 function getLevelAfterKey(themes, levelKey) {
   if (!themes || !themes.length || !levelKey) return null
   var lv = galleryData.getLevelByKey(levelKey)
@@ -199,34 +276,21 @@ function getLevelAfterKey(themes, levelKey) {
   return null
 }
 
-/** 当前可玩关卡的下一关（同主题下一编号，否则下一主题第 1 关） */
 function getLevelAfterCurrent(themes) {
   if (!themes || !themes.length) return null
   var current = getNextLevel(themes)
   if (!current || !current.theme || !current.level) return null
-  var theme = current.theme
-  var levelNum = current.level.level
-  var total = getThemeLevelTotal(theme)
-  if (levelNum < total) {
-    return { theme: theme, level: resolveLevel(theme, levelNum + 1) }
-  }
-  for (var i = 0; i < themes.length; i++) {
-    if (themes[i].id !== theme.id) continue
-    if (i + 1 < themes.length) {
-      var nextTheme = themes[i + 1]
-      var nextTotal = getThemeLevelTotal(nextTheme)
-      if (!nextTotal) return null
-      return { theme: nextTheme, level: resolveLevel(nextTheme, 1) }
-    }
-    break
-  }
-  return null
+  return getLevelAfterKey(themes, current.level.key)
 }
 
 module.exports = {
   loadFromServer: loadFromServer,
   markLevelComplete: markLevelComplete,
   isLevelComplete: isLevelComplete,
+  willAdvanceOnComplete: willAdvanceOnComplete,
+  getMainLevelLabel: getMainLevelLabel,
+  isAllLevelsComplete: isAllLevelsComplete,
+  getCompletedCount: getCompletedCount,
   countThemeCompleted: countThemeCompleted,
   countAllCompleted: countAllCompleted,
   getNextLevel: getNextLevel,

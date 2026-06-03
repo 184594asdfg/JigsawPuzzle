@@ -14,6 +14,7 @@ var sfx = require('../sfx')
 var pressAnim = require('../press-anim')
 var jigsawShape = require('../jigsaw-shape')
 var heroSliceSnap = require('../hero-slice-snap')
+var shareNav = require('../share')
 
 var HOME_BG = 'images/home-bg.jpg'
 var HOME_HERO = 'images/home-hero.png'
@@ -22,7 +23,7 @@ var HOME_HERO_GRID_BG = 'images/home-hero-grid-bg.png'
 var ICON_RANK = 'images/icons/rank.png'
 var ICON_LEVEL = 'images/icons/level.png'
 var ICON_GALLERY = 'images/icons/gallery.png'
-/** 首页底部排行入口（暂隐藏） */
+/** 首页底部排行入口（暂时隐藏） */
 var SHOW_RANK_BTN = false
 
 // 底部侧钮尺寸（排行 / 图库）
@@ -271,6 +272,7 @@ HomeScreen.prototype.update = function (dt) {
   var id = tick.id
   if (id === 'settings') this._openSettings()
   else if (id === 'rank') this._openRank()
+  else if (id === 'share') shareNav.shareToFriend()
   else if (id === 'gallery') this._openGallery()
   else if (id === 'main') this._startPuzzle()
 }
@@ -339,18 +341,30 @@ HomeScreen.prototype.render = function (ctx) {
     this._drawSettingsModal(ctx, W, H)
   }
 
-  // 设置图标（按压动效结束后再弹窗）
+  // 左上：设置 + 分享（分享在设置下方）
   var self = this
   var anim = this._pressAnim
+  var navY = layout.nav.y
+  var navH = layout.nav.h
   settingsModal.drawNavIcon(
-    ctx, layout.nav.y, layout.nav.h, pressAnim.btnScale(anim, 'settings')
+    ctx, navY, navH, pressAnim.btnScale(anim, 'settings')
   )
-  if (!this.showSettings && !anim && !heroSliceSnap.isAnimating(this) &&
-    !this._isInputLocked()) {
-    this.addHitZone(settingsModal.navHitRect(layout.nav.y, layout.nav.h, true), function () {
+  if (shareNav.SHOW_SHARE_BTN) {
+    shareNav.drawNavIcon(ctx, navY, navH, pressAnim.btnScale(anim, 'share'))
+  }
+
+  var blockNavHits = !!anim || this.showRank || this.showSettings ||
+    heroSliceSnap.isAnimating(this) || this._isInputLocked()
+  if (!blockNavHits) {
+    this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () {
       self.showRank = false
       self._startPressAnim('settings')
     })
+    if (shareNav.SHOW_SHARE_BTN) {
+      this.addHitZone(shareNav.navHitRect(navY, navH, true), function () {
+        self._startPressAnim('share')
+      })
+    }
   }
 }
 
@@ -461,7 +475,8 @@ HomeScreen.prototype._drawBottomBar = function (ctx, layout) {
   }
 
   var mainScale = pressAnim.btnScale(anim, 'main')
-  var nextLevelNum = progress.countAllCompleted(galleryData.getThemes()) + 1
+  var levelLabel = progress.getMainLevelLabel(galleryData.getThemes())
+  var mainBtnText = levelLabel === '再玩' ? '再玩' : ('关卡' + levelLabel)
   pressAnim.drawWithPressScale(ctx, main.cx, main.cy, mainScale, function () {
     var icon = assets.get(ICON_LEVEL)
     if (icon) {
@@ -471,9 +486,10 @@ HomeScreen.prototype._drawBottomBar = function (ctx, layout) {
     ctx.shadowColor = 'rgba(0,0,0,0.45)'
     ctx.shadowBlur = rpx.rpx(8)
     ctx.shadowOffsetY = rpx.rpx(2)
+    var mainFont = levelLabel === '再玩' ? rpx.rpx(48) : rpx.rpx(56)
     draw.fillTextCentered(
-      ctx, '关卡' + nextLevelNum, main.cx, main.cy,
-      '700 ' + rpx.rpx(56).toFixed(0) + 'px sans-serif', '#ffffff'
+      ctx, mainBtnText, main.cx, main.cy,
+      '700 ' + mainFont.toFixed(0) + 'px sans-serif', '#ffffff'
     )
     ctx.restore()
   })
@@ -615,6 +631,23 @@ HomeScreen.prototype._drawRankModal = function (ctx, W, H) {
   ctx.clip()
 
   var fullList = rankData.getLeaderboard(this.rankTab)
+  if (this.rankTab === 'national' && rankData.isNationalLoading()) {
+    draw.fillTextCentered(
+      ctx, '加载中...', modalX + modalW / 2, listY + listH / 2,
+      '400 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', '#6d8f84'
+    )
+    ctx.restore()
+    return
+  }
+  if (this.rankTab === 'national' && rankData.isNationalLoaded() && !fullList.length) {
+    draw.fillTextCentered(
+      ctx, '暂无排行，快去通关吧', modalX + modalW / 2, listY + listH / 2,
+      '400 ' + rpx.rpx(26).toFixed(0) + 'px sans-serif', '#6d8f84'
+    )
+    ctx.restore()
+    return
+  }
+
   var top3 = fullList.slice(0, 3)
 
   // 滚动内容容器
@@ -803,14 +836,19 @@ HomeScreen.prototype.onTouchCancel = function () {
 HomeScreen.prototype._startPressAnim = function (id) {
   if (this._pressAnim) return
   if (id === 'settings' && this.showSettings) return
-  if (id !== 'settings' && (this.showRank || this.showSettings)) return
+  if (id === 'share' && (this.showRank || this.showSettings)) return
+  if (id !== 'settings' && id !== 'share' && (this.showRank || this.showSettings)) return
   sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
 }
 
 HomeScreen.prototype._openRank = function () {
+  var self = this
   this.showRank = true
   this.rankScrollY = 0
+  if (this.rankTab === 'national') {
+    rankData.loadNationalRank()
+  }
 }
 HomeScreen.prototype._closeRank = function () {
   sfx.playClick()
@@ -838,6 +876,7 @@ HomeScreen.prototype._switchTab = function (tab) {
   if (tab === this.rankTab) return
   this.rankTab = tab
   this.rankScrollY = 0
+  if (tab === 'national') rankData.loadNationalRank()
 }
 HomeScreen.prototype._openGallery = function () {
   var GalleryScreen = require('./gallery-screen')

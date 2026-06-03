@@ -13,6 +13,7 @@ var tools = require('../utils/tools')
 var prefetch = require('../utils/prefetch')
 var loadingScreen = require('./screens/loading-screen')
 var settingsModal = require('./settings-modal')
+var share = require('./share')
 
 var canvas = wx.createCanvas()
 var ctx = canvas.getContext('2d')
@@ -43,14 +44,14 @@ var CORE_ASSETS = [
   loadingScreen.LOADING_LOGO,
   'images/home-hero.png',
   'images/home-hero-grid-bg.png',
-  'images/icons/rank.png',
   'images/icons/level.png',
   'images/icons/gallery.png',
   'images/icons/setting.png',
   'images/themes/theme-unlocked.png',
   'images/themes/theme-locked.png',
   'images/themes/level-placeholder.png',
-  'images/merge_fx.png'
+  'images/merge_fx.png',
+  'images/puzzle-card-back.png'
 ]
 
 /** splash.phase: loading | done */
@@ -193,6 +194,10 @@ function loop(ts) {
 requestAnimationFrame(loop)
 
 settings.init()
+if (share.SHOW_SHARE_BTN) {
+  share.initShare()
+  share.preload()
+}
 loadingScreen.preload()
 
 Promise.all([

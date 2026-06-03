@@ -29,6 +29,9 @@ function request(method, path, data) {
         if (res.statusCode < 200 || res.statusCode >= 300) {
           var body = res.data
           var msg = (body && body.message) ? body.message : ('HTTP ' + res.statusCode)
+          if (res.statusCode === 409) {
+            msg = msg || '次数不足'
+          }
           reject(new Error(msg))
           return
         }

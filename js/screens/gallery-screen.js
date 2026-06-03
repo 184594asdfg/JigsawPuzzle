@@ -548,7 +548,10 @@ GalleryScreen.prototype._onTapLevel = function (level) {
   this.pulseKey = level.key
   this._pulseTime = 0
 
-  if (!level.done) return
+  if (!level.done) {
+    try { wx.showToast({ title: '完成前置关卡后解锁', icon: 'none' }) } catch (e) {}
+    return
+  }
 
   var resolved = galleryData.resolveLevelForPlay(
     level.themeId, level.key, level.level, level

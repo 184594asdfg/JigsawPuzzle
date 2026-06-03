@@ -17,7 +17,7 @@
 |--------|-----|
 | 新用户初始次数 | 每种 **3** 次（仅首次创建用户道具行时写入） |
 | 作用范围 | **全关卡共享**同一套余量 |
-| 通关 | 不扣次数、不清零（与 `jigsaw_user_level_progress` 无关） |
+| 通关 | 不扣次数、不清零（与 `jigsaw_user_progress` 无关） |
 | 重开关卡 | 余量不变 |
 | 广告发放 | `grant +1`（可选上限见下） |
 | 使用 | `consume -1`，余量为 0 时接口拒绝 |
@@ -100,7 +100,8 @@ model JigsawUserTools {
 
 **与现有**：
 
-- `GET/POST /progress` — 仍只记录通关关卡。
+- `GET/POST /progress` — `jigsaw_user_progress`（`completed_count` + `last_completed_at`）。
+- `GET /rank` — 全国榜：`completed_count DESC, last_completed_at ASC`。
 - 进任意拼图关：请求 `GET /tools`（无需 `levelKey`）。
 
 ---
@@ -125,7 +126,7 @@ model JigsawUserTools {
 ```text
 users (1) ── (1) jigsaw_user_tools
 
-users (1) ──< jigsaw_user_level_progress（通关，独立）
+users (1) ──o| jigsaw_user_progress（线性通关，每用户一行）
 ```
 
 ---

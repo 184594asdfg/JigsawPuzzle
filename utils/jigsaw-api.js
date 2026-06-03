@@ -19,21 +19,52 @@ function fetchThemeDetail(themeId) {
   })
 }
 
+function normalizeProgress(data) {
+  if (!data) {
+    return {
+      completedCount: 0,
+      lastCompletedAt: null,
+      nextLevelNum: 1,
+      totalLevels: 0
+    }
+  }
+  var count = data.completedCount != null ? data.completedCount : 0
+  return {
+    completedCount: count,
+    lastCompletedAt: data.lastCompletedAt || null,
+    nextLevelNum: data.nextLevelNum != null ? data.nextLevelNum : count + 1,
+    totalLevels: data.totalLevels || 0,
+    advanced: !!data.advanced
+  }
+}
+
 function fetchProgress(userId) {
   if (!userId) {
-    return Promise.resolve({ completedKeys: [], progress: {} })
+    return Promise.resolve(normalizeProgress(null))
   }
   return request.get(config.api.progress, { userId: userId }).then(function (data) {
-    return {
-      completedKeys: (data && data.completedKeys) ? data.completedKeys : [],
-      progress: (data && data.progress) ? data.progress : {}
-    }
+    return normalizeProgress(data)
   })
 }
 
 function saveProgress(userId, levelKey) {
   if (!userId || !levelKey) return Promise.resolve(null)
-  return request.post(config.api.progress, { userId: userId, levelKey: levelKey })
+  return request.post(config.api.progress, { userId: userId, levelKey: levelKey }).then(function (data) {
+    return normalizeProgress(data)
+  })
+}
+
+function fetchRank(userId, opts) {
+  var query = { limit: (opts && opts.limit) || 100 }
+  if (userId) query.userId = userId
+  return request.get(config.api.rank, query).then(function (data) {
+    return {
+      list: (data && data.list) ? data.list : [],
+      myRank: data && data.myRank != null ? data.myRank : null,
+      myCompletedCount: (data && data.myCompletedCount) || 0,
+      myLastCompletedAt: (data && data.myLastCompletedAt) || null
+    }
+  })
 }
 
 function fetchTools(userId) {
@@ -69,6 +100,7 @@ module.exports = {
   fetchThemeDetail: fetchThemeDetail,
   fetchProgress: fetchProgress,
   saveProgress: saveProgress,
+  fetchRank: fetchRank,
   fetchTools: fetchTools,
   grantTool: grantTool,
   consumeTool: consumeTool

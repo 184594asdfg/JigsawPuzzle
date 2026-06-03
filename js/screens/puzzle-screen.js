@@ -174,9 +174,9 @@ PuzzleScreen.prototype._initEngine = function () {
     grid: this.gridSize,
     image: this.imageSrc,
     onWin: function () {
-      var wasComplete = self.levelKey ? progress.isLevelComplete(self.levelKey) : true
+      var willAdvance = self.levelKey ? progress.willAdvanceOnComplete(self.levelKey) : false
       if (self.levelKey) progress.markLevelComplete(self.levelKey)
-      self._winNewUnlock = !!(self.levelKey && !wasComplete)
+      self._winNewUnlock = willAdvance
       sfx.playWin()
       self.showSuccess = true
       winOverlay.resetFx(self)

@@ -28,6 +28,7 @@ module.exports = {
     login: '/user/wxMiniLoginByCode',
     themes: '/jigsaw/themes',
     progress: '/jigsaw/progress',
+    rank: '/jigsaw/rank',
     tools: '/jigsaw/tools'
   },
   /**
