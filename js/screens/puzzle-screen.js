@@ -15,6 +15,7 @@ var toolRewardFly = require('../tool-reward-fly')
 var addTimeAlarmFly = require('../add-time-alarm-fly')
 var timeupOverlay = require('../timeup-overlay')
 var winOverlay = require('../win-overlay')
+var subpackUi = require('../../utils/subpack-ui')
 var galleryData = require('../../utils/gallery-data')
 var prefetch = require('../../utils/prefetch')
 var tools = require('../../utils/tools')
@@ -115,10 +116,7 @@ PuzzleScreen.prototype.constructor = PuzzleScreen
 
 PuzzleScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
-  settingsModal.preload()
-  toolModal.preload()
-  timeupOverlay.preload()
-  winOverlay.preload()
+  var self = this
   assets.load(PuzzleEngine.CARD_BACK_IMAGE)
   rewardedAd.init()
   assets.load(COUNTDOWN_ALARM_IMAGE)
@@ -127,7 +125,16 @@ PuzzleScreen.prototype.onEnter = function (manager) {
     assets.load(BOTTOM_TOOLS[i].path)
     assets.load(BOTTOM_TOOLS[i].pathActive)
   }
-  this._initEngine()
+  settingsModal.preload()
+  subpackUi.preloadAll().then(function () {
+    toolModal.preload()
+    timeupOverlay.preload()
+    winOverlay.preload()
+    self._initEngine()
+  }).catch(function (err) {
+    console.warn('[puzzle] ui subpack preload failed', err)
+    self._initEngine()
+  })
 }
 
 PuzzleScreen.prototype.onExit = function () {

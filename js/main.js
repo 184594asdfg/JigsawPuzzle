@@ -14,6 +14,7 @@ var prefetch = require('../utils/prefetch')
 var loadingScreen = require('./screens/loading-screen')
 var settingsModal = require('./settings-modal')
 var share = require('./share')
+var subpackUi = require('../utils/subpack-ui')
 
 var canvas = wx.createCanvas()
 var ctx = canvas.getContext('2d')
@@ -42,7 +43,6 @@ GameGlobal._jp = { canvas: canvas, ctx: ctx, width: W, height: H, dpr: DPR }
 var CORE_ASSETS = [
   'images/home-bg.jpg',
   loadingScreen.LOADING_LOGO,
-  'images/home-hero.png',
   'images/home-hero-grid-bg.png',
   'images/icons/level.png',
   'images/icons/gallery.png',
@@ -109,6 +109,10 @@ function bootstrapData() {
       tools.fetchTools()
     ])
   }).then(function () {
+    splash.hint = '正在加载界面资源...'
+    splash.progress = Math.max(splash.progress, 0.82)
+    return subpackUi.preloadAll()
+  }).then(function () {
     splash.hint = '正在加载主题封面...'
     splash.progress = Math.max(splash.progress, 0.86)
     return prefetch.waitForCurrentThemeCover(12000)
@@ -127,7 +131,9 @@ function bootstrapData() {
   }).catch(function (err) {
     console.warn('[main] bootstrap failed', err)
     splash.hint = '部分数据加载失败，即将进入'
-    return progress.loadFromServer().catch(function () {}).then(function () {
+    return subpackUi.preloadAll().catch(function () {}).then(function () {
+      return progress.loadFromServer().catch(function () {})
+    }).then(function () {
       return prefetch.waitForCurrentThemeCover(8000)
     }).catch(function () {})
   })
@@ -168,6 +174,8 @@ wx.onShow(function () {
       progress.loadFromServer(),
       tools.fetchTools()
     ])
+  }).then(function () {
+    return subpackUi.preloadAll().catch(function () {})
   }).then(function () {
     prefetch.prefetchHomeAssets()
   }).catch(function () {})

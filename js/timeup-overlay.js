@@ -5,33 +5,34 @@ var rpx = require('./rpx')
 var assets = require('./assets')
 var draw = require('./draw')
 var pressAnim = require('./press-anim')
+var subpackUi = require('../utils/subpack-ui')
 
-var TIMEUP_TITLE = 'images/timeup/timeup_title.png'
-var BTN_HOME = 'images/timeup/timeup_btn_restart.png'
-var BTN_WATCH_ADD_TIME = 'images/timeup/btn_watch_add_time.png'
+var TIMEUP_TITLE = subpackUi.uiPath('images/timeup/timeup_title.png')
+var BTN_HOME = subpackUi.uiPath('images/timeup/timeup_btn_restart.png')
+var BTN_WATCH_ADD_TIME = subpackUi.uiPath('images/timeup/btn_watch_add_time.png')
 
 /** 静态路径列表，避免 devtools ignoreDevUnusedFiles 漏打包动态拼接路径 */
 var FX_FRAMES = [
-  'images/timeup/fx/timeup_fx_01.png',
-  'images/timeup/fx/timeup_fx_02.png',
-  'images/timeup/fx/timeup_fx_03.png',
-  'images/timeup/fx/timeup_fx_04.png',
-  'images/timeup/fx/timeup_fx_05.png',
-  'images/timeup/fx/timeup_fx_06.png',
-  'images/timeup/fx/timeup_fx_07.png',
-  'images/timeup/fx/timeup_fx_08.png',
-  'images/timeup/fx/timeup_fx_09.png',
-  'images/timeup/fx/timeup_fx_10.png',
-  'images/timeup/fx/timeup_fx_11.png',
-  'images/timeup/fx/timeup_fx_12.png',
-  'images/timeup/fx/timeup_fx_13.png',
-  'images/timeup/fx/timeup_fx_14.png',
-  'images/timeup/fx/timeup_fx_15.png',
-  'images/timeup/fx/timeup_fx_16.png',
-  'images/timeup/fx/timeup_fx_17.png',
-  'images/timeup/fx/timeup_fx_18.png',
-  'images/timeup/fx/timeup_fx_19.png',
-  'images/timeup/fx/timeup_fx_20.png'
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_01.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_02.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_03.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_04.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_05.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_06.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_07.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_08.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_09.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_10.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_11.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_12.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_13.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_14.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_15.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_16.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_17.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_18.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_19.png'),
+  subpackUi.uiPath('images/timeup/fx/timeup_fx_20.png')
 ]
 
 var FX_FRAME_COUNT = FX_FRAMES.length

@@ -5,9 +5,10 @@ var rpx = require('./rpx')
 var assets = require('./assets')
 var draw = require('./draw')
 var puzzleLayout = require('./puzzle/layout')
+var subpackUi = require('../utils/subpack-ui')
 
-var WIN_TITLE = 'images/win/win_title.png'
-var WIN_NEXT = 'images/win/win_next.png'
+var WIN_TITLE = subpackUi.uiPath('images/win/win_title.png')
+var WIN_NEXT = subpackUi.uiPath('images/win/win_next.png')
 
 var SHRINK_MS = 1000
 var END_SCALE = 0.72

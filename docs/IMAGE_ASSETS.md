@@ -4,7 +4,20 @@
 
 首页、按钮、弹窗、特效等。关卡原图在 **CDN**，不要放进包内。
 
-当前包内图片约 **5～6MB**，建议压到 **2～3MB** 再上传（微信主包常见 **4MB** 上限）。
+## 主包 4MB 限制（已做分包）
+
+微信主包 ≤ **4MB**。大块 UI 已放入分包 **`subpack-ui/`**（`game.json` → `subpackages`），启动时在 `main.js` 里 `loadSubpackage('ui')` 后再显示首页 hero / 进拼图。
+
+| 包 | 约体积 | 内容 |
+|----|--------|------|
+| **主包** | ~2.8MB | `images/` 图标/主题/设置、`audio/`、`js/` |
+| **分包 ui** | ~3.2MB | `timeup/`、`modals/`、`win/`、`home-hero.png` |
+
+主包 `images/` 约 **1.9MB**；分包内资源路径为 `subpack-ui/images/...`（见 `utils/subpack-ui.js` 的 `uiPath()`）。
+
+**不影响原效果**：分包前后为同一批文件；启动时 `preloadAll()` 在进首页前加载 hero/timeup/modals/win 全部分包图，进拼图前再次确保已加载（与原先打进主包时资源就绪时机一致）。
+
+当前包内图片若未分包约 **5～6MB**；主包部分建议保持 **≤2MB** 留余量给音频与代码。
 
 ### 一键压缩（本地）
 

@@ -7,6 +7,7 @@ var assets = require('./assets')
 var draw = require('./draw')
 var pressAnim = require('./press-anim')
 var sfx = require('./sfx')
+var subpackUi = require('../utils/subpack-ui')
 
 var SRC_W = 750
 var SRC_H = 855
@@ -28,15 +29,15 @@ var CONFIRM_LAYOUT = { x: 262, y: 707, w: 226, h: 76 }
 
 var MODAL_CONFIG = {
   addTime: {
-    image: 'images/modals/add_time_modal.png',
+    image: subpackUi.uiPath('images/modals/add_time_modal.png'),
     confirm: true
   },
   hint: {
-    image: 'images/modals/hint_modal.png',
+    image: subpackUi.uiPath('images/modals/hint_modal.png'),
     confirm: true
   },
   preview: {
-    image: 'images/modals/preview_modal.png',
+    image: subpackUi.uiPath('images/modals/preview_modal.png'),
     confirm: true
   }
 }

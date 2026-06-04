@@ -4,6 +4,7 @@
 var assets = require('../js/assets')
 var galleryData = require('./gallery-data')
 var progress = require('./progress')
+var subpackUi = require('./subpack-ui')
 
 var prefetchToken = 0
 var lastPrefetchKeys = ''
@@ -151,7 +152,8 @@ function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
   var waitP = delay > 0
     ? new Promise(function (resolve) { setTimeout(resolve, delay) })
     : Promise.resolve()
-  Promise.all([loadP, waitP]).then(function () {
+  var uiP = subpackUi.preloadAll().catch(function () {})
+  Promise.all([loadP, waitP, uiP]).then(function () {
     var PuzzleScreen = require('../js/screens/puzzle-screen')
     manager.push(new PuzzleScreen({
       image: resolved.image,

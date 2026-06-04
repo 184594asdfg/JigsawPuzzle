@@ -17,7 +17,8 @@ var heroSliceSnap = require('../hero-slice-snap')
 var shareNav = require('../share')
 
 var HOME_BG = 'images/home-bg.jpg'
-var HOME_HERO = 'images/home-hero.png'
+var subpackUi = require('../../utils/subpack-ui')
+var HOME_HERO = subpackUi.uiPath('images/home-hero.png')
 /** 5×5 拼图底图资源（设计稿 750×1000）；运行时按拼图轮廓绘交替色 + 矢量分割线 */
 var HOME_HERO_GRID_BG = 'images/home-hero-grid-bg.png'
 var ICON_RANK = 'images/icons/rank.png'
@@ -307,6 +308,10 @@ HomeScreen.prototype.render = function (ctx) {
 
   var heroRect = layout.hero
   var hero = assets.get(HOME_HERO)
+  if (!hero) {
+    assets.tryLoad(HOME_HERO)
+    hero = assets.get(HOME_HERO)
+  }
   if (hero && heroRect.w > 0) {
     ctx.drawImage(hero, heroRect.x, heroRect.y, heroRect.w, heroRect.h)
   }

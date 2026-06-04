@@ -1,6 +1,12 @@
 {
   "deviceOrientation": "portrait",
   "showStatusBar": false,
+  "subpackages": [
+    {
+      "name": "ui",
+      "root": "subpack-ui/"
+    }
+  ],
   "networkTimeout": {
     "request": 10000,
     "connectSocket": 10000,
