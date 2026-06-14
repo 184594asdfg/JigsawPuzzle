@@ -75,7 +75,7 @@ python3 tools/compress_pack_images.py
 | 文件 | 路径 |
 |------|------|
 | 封面 | `{cdnPrefix}{image_folder}/cover.jpg` |
-| 关卡 | `{cdnPrefix}{image_folder}/01.png` … `25.png` |
+| 关卡 | `{cdnPrefix}{image_folder}/01.jpg` … `25.jpg` |
 
 - 客户端：`utils/app-config.js` → `cdnPrefix`
 - 后端：`.env` → `JIGSAW_CDN_PREFIX`（须一致，末尾 `/`）

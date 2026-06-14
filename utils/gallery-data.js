@@ -67,7 +67,7 @@ function buildLevelImageUrl(imageFolder, levelNum) {
   if (prefix.charAt(prefix.length - 1) !== '/') prefix += '/'
   var folder = imageFolder.replace(/^\/+/, '').replace(/\/+$/, '')
   var num = levelNum < 10 ? '0' + levelNum : String(levelNum)
-  return prefix + folder + '/' + num + '.png'
+  return prefix + folder + '/' + num + '.jpg'
 }
 
 /** CDN 原图 URL 追加缩略图处理参数（仅用于图集列表展示） */
