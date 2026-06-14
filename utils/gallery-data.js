@@ -4,7 +4,7 @@
 var jigsawApi = require('./jigsaw-api')
 var config = require('./app-config')
 
-var DEFAULT_GRID = 4
+var DEFAULT_GRID = config.defaultGrid || 4
 var LEVELS_PER_THEME = 25
 
 /** 图集关卡格 1x 缩略图（CDN imageView2，与 bookSnap 一致） */
@@ -26,11 +26,18 @@ function isAbsoluteUrl(url) {
   return url.indexOf('http://') === 0 || url.indexOf('https://') === 0
 }
 
+function stripLocalhostPath(url) {
+  return String(url).replace(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/?/i, '')
+}
+
 /** 将接口相对路径或目录片段拼成完整 CDN URL */
 function ensureCdnUrl(urlOrPath) {
   if (!urlOrPath) return ''
   var s = String(urlOrPath).trim()
   if (!s) return ''
+  if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i.test(s)) {
+    s = stripLocalhostPath(s)
+  }
   if (isAbsoluteUrl(s)) return s
   var prefix = config.cdnPrefix || ''
   if (!prefix) return s
@@ -72,6 +79,9 @@ function appendGalleryThumbParams(url) {
 }
 
 function resolveLevelImage(theme, levelNum, level) {
+  if (config.allLevelsPreviewImage) {
+    return config.allLevelsPreviewImage
+  }
   if (level && level.image) return ensureCdnUrl(level.image)
   if (theme && theme.imageFolder && levelNum) {
     return buildLevelImageUrl(theme.imageFolder, levelNum)
@@ -105,7 +115,7 @@ function resolveLevelForPlay(themeId, levelKey, levelNum, partial) {
     level: num,
     name: (lv && lv.name) ? lv.name : ('关卡 ' + num),
     image: resolveLevelImage(theme, num, lv),
-    grid: (lv && lv.grid) ? lv.grid : DEFAULT_GRID,
+    grid: config.resolveGridSize(lv && lv.grid),
     timeLimit: (lv && lv.timeLimit) ? lv.timeLimit : 0
   }
 }
@@ -122,7 +132,7 @@ function normalizeLevel(level, themeId, imageFolder) {
     level: levelNum,
     name: level.name || '',
     image: image,
-    grid: level.grid != null ? level.grid : (level.gridSize || DEFAULT_GRID),
+    grid: config.resolveGridSize(level.grid != null ? level.grid : level.gridSize),
     timeLimit: level.timeLimit != null ? level.timeLimit : (level.timeLimitSec || 0)
   }
 }

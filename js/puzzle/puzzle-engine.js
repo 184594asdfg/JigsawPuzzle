@@ -21,7 +21,12 @@ var ANIM_DUR = 220
 var HINT_ANIM_DUR = 2000
 /** 提示程序化拖动：只移到目标方向约八成，松手后再交换落位 */
 var HINT_DRAG_VISUAL_RATIO = 0.78
-var MERGE_FX_DUR = 1100
+/** 拼合：放大还原 + 光效，整段 400ms 内完成 */
+var MERGE_FX_DUR = 400
+/** 拼合组块放大峰值（1 + bump → 1.04） */
+var MERGE_PULSE_BUMP = 0.04
+/** 放大→还原在合并动画时长中的占比（前段抬起、后段落回） */
+var MERGE_PULSE_PEAK_AT = 0.38
 /** 开局：拼图区右下角叠成一摞 → 顶牌飞出 → 每块绕自身水平中线翻面 */
 /** 发牌：3×3 铺开约 616ms，7×7 发牌阶段约 1.5s，中间难度线性过渡 */
 var INTRO_STAGGER_MS = 42
@@ -48,16 +53,29 @@ function introStaggerMs(pieceCount) {
 
 var SOUND_MOVE = 'audio/move.mp3'
 var SOUND_SWAP = 'audio/swap.mp3'
+/** 相邻正确块拼合成组 */
+var SOUND_MERGE = 'audio/merge.mp3'
+var SOUND_MERGE_VOLUME = 0.82
 var MERGE_FX_IMAGE = 'images/merge_fx.png'
 /** 开局发牌/翻面时的牌背图（2:3，铺满单块内层裁切区） */
 var CARD_BACK_IMAGE = 'images/puzzle-card-back.png'
 /** 每格原位半透明占位（拖拽/交换动画时露出） */
-var SLOT_PLACEHOLDER_FILL = 'rgba(255,255,255,0.38)'
-var SLOT_PLACEHOLDER_STROKE = 'rgba(0,0,0,0.12)'
+var SLOT_PLACEHOLDER_FILL = 'rgba(110, 90, 130, 0.48)'
+var SLOT_PLACEHOLDER_STROKE = 'rgba(70, 55, 90, 0.28)'
 
 function easeOutCubic(t) {
   var p = 1 - t
   return 1 - p * p * p
+}
+
+/** 拼合脉冲：1 → 1+bump → 1 */
+function mergePulseScale(t) {
+  if (t >= 1) return 1
+  if (t <= 0) return 1
+  if (t <= MERGE_PULSE_PEAK_AT) {
+    return 1 + MERGE_PULSE_BUMP * easeOutCubic(t / MERGE_PULSE_PEAK_AT)
+  }
+  return 1 + MERGE_PULSE_BUMP * (1 - easeOutCubic((t - MERGE_PULSE_PEAK_AT) / (1 - MERGE_PULSE_PEAK_AT)))
 }
 
 function fisherYatesShuffle(arr) {
@@ -108,16 +126,22 @@ PuzzleEngine.prototype._initAudio = function () {
   try {
     this._moveAudio = wx.createInnerAudioContext()
     this._swapAudio = wx.createInnerAudioContext()
+    this._mergeAudio = wx.createInnerAudioContext()
     this._moveAudio.src = SOUND_MOVE
     this._swapAudio.src = SOUND_SWAP
+    this._mergeAudio.src = SOUND_MERGE
+    this._mergeAudio.volume = SOUND_MERGE_VOLUME
+    this._mergeAudio.obeyMuteSwitch = false
   } catch (e) {
     this._moveAudio = null
     this._swapAudio = null
+    this._mergeAudio = null
   }
 }
 PuzzleEngine.prototype.destroy = function () {
   if (this._moveAudio) { this._moveAudio.destroy && this._moveAudio.destroy(); this._moveAudio = null }
   if (this._swapAudio) { this._swapAudio.destroy && this._swapAudio.destroy(); this._swapAudio = null }
+  if (this._mergeAudio) { this._mergeAudio.destroy && this._mergeAudio.destroy(); this._mergeAudio = null }
 }
 PuzzleEngine.prototype.setSfxEnabled = function (enabled) {
   this.sfxEnabled = !!enabled
@@ -670,9 +694,8 @@ PuzzleEngine.prototype.render = function (ctx) {
     normal.sort(sortByStackLayer)
     compound.sort(sortByStackLayer)
   }
-  if (!this._intro) {
-    this._renderSlotPlaceholders(ctx, bx, by, L)
-  }
+  // 占位格始终先画在底层，发牌/翻面阶段也可见
+  this._renderSlotPlaceholders(ctx, bx, by, L)
 
   var showBack = flipSt ? flipSt.showBack : (this._intro && this._intro.showBack)
   for (var n = 0; n < normal.length; n++) {
@@ -689,9 +712,24 @@ PuzzleEngine.prototype.render = function (ctx) {
   }
 }
 
+PuzzleEngine.prototype._mergePulseScaleForGroup = function (groupId) {
+  var fx = this._mergeFx
+  if (!fx || fx.groupId !== groupId || fx.t == null) return 1
+  return mergePulseScale(fx.t)
+}
+
 PuzzleEngine.prototype._renderGroup = function (ctx, group, bx, by, L, withShadow, showBack, flipSt) {
   var gtx = this._groupTx(group)
   var gty = this._groupTy(group)
+  var pulse = this._mergePulseScaleForGroup(group.id)
+  if (pulse !== 1) {
+    var cx = bx + group.x + gtx + group.w / 2
+    var cy = by + group.y + gty + group.h / 2
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.scale(pulse, pulse)
+    ctx.translate(-cx, -cy)
+  }
   for (var i = 0; i < group.pieces.length; i++) {
     var p = group.pieces[i]
     var px = this._pieceTx(p)
@@ -700,6 +738,7 @@ PuzzleEngine.prototype._renderGroup = function (ctx, group, bx, by, L, withShado
     var pieceY = by + group.y + gty + p.localY + py
     this._renderPiece(ctx, p, pieceX, pieceY, L, withShadow, showBack, flipSt)
   }
+  if (pulse !== 1) ctx.restore()
 }
 
 PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow, showBack, flipSt) {
@@ -815,7 +854,7 @@ PuzzleEngine.prototype._renderMergeFx = function (ctx, bx, by) {
   if (!img) return
   var t = fx.t
   var alpha = t < 0.2 ? (t / 0.2) : (t > 0.7 ? Math.max(0, 1 - (t - 0.7) / 0.3) : 1)
-  var scale = 0.88 + Math.min(1, t * 2) * 0.12
+  var scale = mergePulseScale(t)
   ctx.save()
   ctx.globalAlpha = alpha
   ctx.globalCompositeOperation = 'lighter'
@@ -1211,6 +1250,7 @@ PuzzleEngine.prototype._commitMove = function (memberIds, newSlotById, assignmen
     if (mg) {
       var pad = 8
       this._mergeFx = {
+        groupId: mg.id,
         x: Math.max(0, mg.x - pad),
         y: Math.max(0, mg.y - pad),
         w: mg.w + pad * 2,
@@ -1218,6 +1258,7 @@ PuzzleEngine.prototype._commitMove = function (memberIds, newSlotById, assignmen
         t0: now,
         t: 0
       }
+      this._playSound(this._mergeAudio)
     }
   }
 

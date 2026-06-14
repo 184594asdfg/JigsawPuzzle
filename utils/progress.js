@@ -3,6 +3,7 @@
  */
 var jigsawApi = require('./jigsaw-api')
 var user = require('./user')
+var config = require('./app-config')
 var galleryData = require('./gallery-data')
 
 var STORAGE_PROGRESS = 'puzzle_progress_v2'
@@ -178,7 +179,7 @@ function resolveLevel(theme, levelNum) {
     level: levelNum,
     name: '关卡 ' + levelNum,
     image: galleryData.resolveLevelImage(theme, levelNum, null),
-    grid: galleryData.DEFAULT_GRID,
+    grid: config.resolveGridSize(0),
     timeLimit: 0
   }
 }
