@@ -694,7 +694,6 @@ PuzzleEngine.prototype.render = function (ctx) {
     normal.sort(sortByStackLayer)
     compound.sort(sortByStackLayer)
   }
-  // 占位格始终先画在底层，发牌/翻面阶段也可见
   this._renderSlotPlaceholders(ctx, bx, by, L)
 
   var showBack = flipSt ? flipSt.showBack : (this._intro && this._intro.showBack)
@@ -718,9 +717,50 @@ PuzzleEngine.prototype._mergePulseScaleForGroup = function (groupId) {
   return mergePulseScale(fx.t)
 }
 
+PuzzleEngine.prototype._renderGroupDragShadow = function (ctx, bx, by, group, gtx, gty, L) {
+  var pieces = group.pieces
+  if (!pieces || !pieces.length) return
+  var cellW = L.cellW
+  var cellH = L.cellH
+  var R = L.PIECE_RADIUS
+  var ox = bx + group.x + gtx
+  var oy = by + group.y + gty
+
+  ctx.save()
+  ctx.shadowColor = 'rgba(0,0,0,0.35)'
+  ctx.shadowBlur = 12
+  ctx.shadowOffsetY = 4
+  ctx.beginPath()
+  for (var i = 0; i < pieces.length; i++) {
+    var p = pieces[i]
+    var att = p.att
+    var tl = R
+    var tr = R
+    var br = R
+    var bl = R
+    if (p.inCompound) {
+      if (att.top || att.left) tl = 0
+      if (att.top || att.right) tr = 0
+      if (att.bottom || att.right) br = 0
+      if (att.bottom || att.left) bl = 0
+    }
+    var px = ox + p.localX + this._pieceTx(p)
+    var py = oy + p.localY + this._pieceTy(p)
+    draw.roundedRectPathCorners(ctx, px, py, cellW, cellH, tl, tr, br, bl)
+  }
+  // 一次 fill 产生整组外轮廓阴影，避免子块接缝处叠影
+  ctx.fillStyle = 'rgba(255,255,255,0.01)'
+  ctx.fill()
+  ctx.restore()
+}
+
 PuzzleEngine.prototype._renderGroup = function (ctx, group, bx, by, L, withShadow, showBack, flipSt) {
   var gtx = this._groupTx(group)
   var gty = this._groupTy(group)
+  var pieceShadow = withShadow && !group.isCompound
+  if (withShadow && group.isCompound) {
+    this._renderGroupDragShadow(ctx, bx, by, group, gtx, gty, L)
+  }
   var pulse = this._mergePulseScaleForGroup(group.id)
   if (pulse !== 1) {
     var cx = bx + group.x + gtx + group.w / 2
@@ -736,7 +776,7 @@ PuzzleEngine.prototype._renderGroup = function (ctx, group, bx, by, L, withShado
     var py = this._pieceTy(p)
     var pieceX = bx + group.x + gtx + p.localX + px
     var pieceY = by + group.y + gty + p.localY + py
-    this._renderPiece(ctx, p, pieceX, pieceY, L, withShadow, showBack, flipSt)
+    this._renderPiece(ctx, p, pieceX, pieceY, L, pieceShadow, showBack, flipSt)
   }
   if (pulse !== 1) ctx.restore()
 }
@@ -752,6 +792,19 @@ PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow,
     ctx.scale(flipSt.scaleX, 1)
     ctx.translate(-pcx, -pcy)
   }
+
+  // 发牌：仅牌背图铺满整格，无白底/描边/内缩
+  if (this._intro && this._intro.phase === 'deal') {
+    var dealBack = assets.get(CARD_BACK_IMAGE)
+    if (dealBack) {
+      draw.drawImageCover(ctx, dealBack, x, y, cellW, cellH)
+    } else {
+      assets.tryLoad(CARD_BACK_IMAGE)
+    }
+    if (flipSt) ctx.restore()
+    return
+  }
+
   var inset = L.BORDER + L.PIECE_PADDING
   var att = piece.att
   var R = L.PIECE_RADIUS
@@ -772,10 +825,12 @@ PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow,
     ctx.shadowOffsetY = 4
   }
 
-  // 底色（白）
-  draw.roundedRectPathCorners(ctx, x, y, cellW, cellH, tl, tr, br, bl)
-  ctx.fillStyle = '#ffffff'
-  ctx.fill()
+  // 底色（白）；发牌/牌背阶段不铺白底，避免露出白边
+  if (!showBack) {
+    draw.roundedRectPathCorners(ctx, x, y, cellW, cellH, tl, tr, br, bl)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+  }
 
   ctx.restore()
 

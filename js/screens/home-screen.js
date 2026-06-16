@@ -202,7 +202,11 @@ HomeScreen.prototype._isInputLocked = function () {
 HomeScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
   settingsModal.preload()
-  prefetch.prefetchHomeAssets()
+  progress.loadFromServer().then(function () {
+    prefetch.prefetchHomeAssets()
+  }).catch(function () {
+    prefetch.prefetchHomeAssets()
+  })
 }
 
 HomeScreen.prototype.onResume = function () {

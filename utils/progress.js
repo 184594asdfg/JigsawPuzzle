@@ -13,6 +13,7 @@ var lastCompletedAt = null
 var totalLevels = 0
 var synced = false
 
+
 function clearLegacyStorage() {
   try {
     wx.removeStorageSync(LEGACY_STORAGE)
@@ -37,8 +38,14 @@ function writeLocal() {
 }
 
 function applyServerData(data) {
-  completedCount = Math.max(0, (data && data.completedCount) || 0)
-  lastCompletedAt = (data && data.lastCompletedAt) ? data.lastCompletedAt : null
+  var serverCount = Math.max(0, (data && data.completedCount) || 0)
+  // 保留本地已乐观推进的进度，避免保存失败或竞态把 completedCount 打回 0
+  completedCount = Math.max(completedCount, serverCount)
+  if (data && data.lastCompletedAt) {
+    lastCompletedAt = data.lastCompletedAt
+  } else if (serverCount === 0 && completedCount === 0) {
+    lastCompletedAt = null
+  }
   if (data && data.totalLevels > 0) totalLevels = data.totalLevels
   writeLocal()
   synced = true
@@ -118,8 +125,6 @@ function markLevelComplete(levelKey) {
   var themes = galleryData.getThemes()
   var globalIndex = getGlobalIndexForKey(themes, levelKey)
   var isNext = globalIndex === completedCount + 1
-  var prevCount = completedCount
-  var prevTime = lastCompletedAt
 
   if (isNext) {
     completedCount += 1
@@ -137,11 +142,7 @@ function markLevelComplete(levelKey) {
     applyServerData(data)
   }).catch(function (err) {
     console.warn('[progress] save to server failed', err)
-    if (isNext) {
-      completedCount = prevCount
-      lastCompletedAt = prevTime
-      writeLocal()
-    }
+    // 保留本地乐观更新，避免通关后仍显示关卡 1
   })
 }
 
