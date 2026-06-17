@@ -9,12 +9,14 @@ var settingsModal = require('../settings-modal')
 var rankData = require('../../utils/rank-data')
 var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
+var remoteSync = require('../../utils/remote-sync')
 var prefetch = require('../../utils/prefetch')
 var sfx = require('../sfx')
 var pressAnim = require('../press-anim')
 var jigsawShape = require('../jigsaw-shape')
 var heroSliceSnap = require('../hero-slice-snap')
 var shareNav = require('../share')
+var gameClub = require('../game-club')
 
 var HOME_BG = 'images/home-bg.jpg'
 var subpackUi = require('../../utils/subpack-ui')
@@ -202,7 +204,8 @@ HomeScreen.prototype._isInputLocked = function () {
 HomeScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
   settingsModal.preload()
-  progress.loadFromServer().then(function () {
+  gameClub.preload()
+  remoteSync.syncOnEnter().then(function () {
     prefetch.prefetchHomeAssets()
   }).catch(function () {
     prefetch.prefetchHomeAssets()
@@ -212,8 +215,7 @@ HomeScreen.prototype.onEnter = function (manager) {
 HomeScreen.prototype.onResume = function () {
   this.showRank = false
   this.showSettings = false
-  var self = this
-  progress.loadFromServer().then(function () {
+  remoteSync.syncOnEnter().then(function () {
     prefetch.prefetchHomeAssets()
   })
 }
@@ -278,6 +280,7 @@ HomeScreen.prototype.update = function (dt) {
   if (id === 'settings') this._openSettings()
   else if (id === 'rank') this._openRank()
   else if (id === 'share') shareNav.shareToFriend()
+  else if (id === 'gameClub') gameClub.openGameClub()
   else if (id === 'gallery') this._openGallery()
   else if (id === 'main') this._startPuzzle()
 }
@@ -358,6 +361,10 @@ HomeScreen.prototype.render = function (ctx) {
   settingsModal.drawNavIcon(
     ctx, navY, navH, pressAnim.btnScale(anim, 'settings')
   )
+  var heroTopY = layout.topArea && layout.topArea.y > 0 ? layout.topArea.y : layout.hero.y
+  gameClub.drawNavIcon(
+    ctx, navY, navH, heroTopY, pressAnim.btnScale(anim, 'gameClub')
+  )
   if (shareNav.SHOW_SHARE_BTN) {
     shareNav.drawNavIcon(ctx, navY, navH, pressAnim.btnScale(anim, 'share'))
   }
@@ -368,6 +375,10 @@ HomeScreen.prototype.render = function (ctx) {
     this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () {
       self.showRank = false
       self._startPressAnim('settings')
+    })
+    this.addHitZone(gameClub.navHitRect(navY, navH, heroTopY, true), function () {
+      self.showRank = false
+      self._startPressAnim('gameClub')
     })
     if (shareNav.SHOW_SHARE_BTN) {
       this.addHitZone(shareNav.navHitRect(navY, navH, true), function () {
@@ -846,7 +857,9 @@ HomeScreen.prototype._startPressAnim = function (id) {
   if (this._pressAnim) return
   if (id === 'settings' && this.showSettings) return
   if (id === 'share' && (this.showRank || this.showSettings)) return
-  if (id !== 'settings' && id !== 'share' && (this.showRank || this.showSettings)) return
+  if (id === 'gameClub' && (this.showRank || this.showSettings)) return
+  if (id !== 'settings' && id !== 'share' && id !== 'gameClub' &&
+    (this.showRank || this.showSettings)) return
   sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
 }

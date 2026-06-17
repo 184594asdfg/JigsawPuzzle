@@ -14,6 +14,7 @@ var toolModal = require('../puzzle-tool-modal')
 var toolRewardFly = require('../tool-reward-fly')
 var addTimeAlarmFly = require('../add-time-alarm-fly')
 var timeupOverlay = require('../timeup-overlay')
+var mergeFx = require('../merge-fx')
 var winOverlay = require('../win-overlay')
 var subpackUi = require('../../utils/subpack-ui')
 var galleryData = require('../../utils/gallery-data')
@@ -126,6 +127,7 @@ PuzzleScreen.prototype.onEnter = function (manager) {
     assets.load(BOTTOM_TOOLS[i].pathActive)
   }
   settingsModal.preload()
+  mergeFx.preload()
   subpackUi.preloadAll().then(function () {
     toolModal.preload()
     timeupOverlay.preload()

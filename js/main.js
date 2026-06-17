@@ -6,14 +6,12 @@ var assets = require('./assets')
 var screenManager = require('./screen-manager')
 var bgm = require('./bgm')
 var settings = require('../utils/settings')
-var user = require('../utils/user')
-var galleryData = require('../utils/gallery-data')
-var progress = require('../utils/progress')
-var tools = require('../utils/tools')
+var remoteSync = require('../utils/remote-sync')
 var prefetch = require('../utils/prefetch')
 var loadingScreen = require('./screens/loading-screen')
 var settingsModal = require('./settings-modal')
 var share = require('./share')
+var gameClub = require('./game-club')
 var subpackUi = require('../utils/subpack-ui')
 
 var canvas = wx.createCanvas()
@@ -47,10 +45,10 @@ var CORE_ASSETS = [
   'images/icons/level.png',
   'images/icons/gallery.png',
   'images/icons/setting.png',
+  'images/icons/game-club.png',
   'images/themes/theme-unlocked.png',
   'images/themes/theme-locked.png',
   'images/themes/level-placeholder.png',
-  'images/merge_fx.png',
   'images/puzzle-card-back.png'
 ]
 
@@ -98,17 +96,9 @@ function bootstrapData() {
 
   settingsModal.preload()
 
-  var themesPromise = galleryData.loadThemes({ summary: true })
-  var loginPromise = user.autoLogin()
-
-  return Promise.all([themesPromise, loginPromise]).then(function () {
+  return remoteSync.syncOnEnter().then(function () {
     splash.hint = '正在同步进度...'
     splash.progress = Math.max(splash.progress, 0.78)
-    return Promise.all([
-      progress.loadFromServer(),
-      tools.fetchTools()
-    ])
-  }).then(function () {
     splash.hint = '正在加载界面资源...'
     splash.progress = Math.max(splash.progress, 0.82)
     return subpackUi.preloadAll()
@@ -132,7 +122,7 @@ function bootstrapData() {
     console.warn('[main] bootstrap failed', err)
     splash.hint = '部分数据加载失败，即将进入'
     return subpackUi.preloadAll().catch(function () {}).then(function () {
-      return progress.loadFromServer().catch(function () {})
+      return remoteSync.syncOnEnter().catch(function () {})
     }).then(function () {
       return prefetch.waitForCurrentThemeCover(8000)
     }).catch(function () {})
@@ -167,14 +157,7 @@ wx.onTouchCancel(function (e) { if (canInteract()) screenManager.onTouchCancel(e
 wx.onShow(function () {
   if (!canInteract()) return
   bgm.sync()
-  galleryData.loadThemes({ summary: true }).then(function () {
-    return user.autoLogin()
-  }).then(function () {
-    return Promise.all([
-      progress.loadFromServer(),
-      tools.fetchTools()
-    ])
-  }).then(function () {
+  remoteSync.syncOnEnter().then(function () {
     return subpackUi.preloadAll().catch(function () {})
   }).then(function () {
     prefetch.prefetchHomeAssets()
@@ -206,6 +189,7 @@ if (share.SHOW_SHARE_BTN) {
   share.initShare()
   share.preload()
 }
+gameClub.preload()
 loadingScreen.preload()
 
 Promise.all([

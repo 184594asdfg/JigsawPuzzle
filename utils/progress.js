@@ -37,10 +37,16 @@ function writeLocal() {
   })
 }
 
-function applyServerData(data) {
+function applyServerData(data, opts) {
+  opts = opts || {}
+  var authoritative = opts.authoritative !== false
+  var prevCount = completedCount
   var serverCount = Math.max(0, (data && data.completedCount) || 0)
-  // 保留本地已乐观推进的进度，避免保存失败或竞态把 completedCount 打回 0
-  completedCount = Math.max(completedCount, serverCount)
+  if (authoritative) {
+    completedCount = serverCount
+  } else {
+    completedCount = Math.max(completedCount, serverCount)
+  }
   if (data && data.lastCompletedAt) {
     lastCompletedAt = data.lastCompletedAt
   } else if (serverCount === 0 && completedCount === 0) {
@@ -49,6 +55,11 @@ function applyServerData(data) {
   if (data && data.totalLevels > 0) totalLevels = data.totalLevels
   writeLocal()
   synced = true
+  if (authoritative && prevCount !== completedCount) {
+    try {
+      require('./prefetch').resetPrefetchCache()
+    } catch (e) {}
+  }
 }
 
 function computeTotalFromThemes(themes) {
@@ -105,16 +116,22 @@ function getGlobalIndexForKey(themes, levelKey) {
   return 0
 }
 
-function loadFromServer() {
+function loadFromServer(opts) {
+  opts = opts || {}
+  var authoritative = opts.authoritative !== false
   clearLegacyStorage()
-  ensureLoaded()
+  if (!authoritative) ensureLoaded()
   var userId = user.getUserId()
-  if (!userId) return Promise.resolve(completedCount)
+  if (!userId) {
+    ensureLoaded()
+    return Promise.resolve(completedCount)
+  }
   return jigsawApi.fetchProgress(userId).then(function (data) {
-    applyServerData(data)
+    applyServerData(data, { authoritative: authoritative })
     return completedCount
   }).catch(function (err) {
     console.warn('[progress] load from server failed', err)
+    ensureLoaded()
     return completedCount
   })
 }
@@ -139,7 +156,7 @@ function markLevelComplete(levelKey) {
   if (!userId) return
   jigsawApi.saveProgress(userId, levelKey).then(function (data) {
     if (!data) return
-    applyServerData(data)
+    applyServerData(data, { authoritative: true })
   }).catch(function (err) {
     console.warn('[progress] save to server failed', err)
     // 保留本地乐观更新，避免通关后仍显示关卡 1

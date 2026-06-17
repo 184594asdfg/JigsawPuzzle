@@ -46,7 +46,7 @@ python3 tools/compress_pack_images.py
 |------|--------|------|
 | `timeup/fx/timeup_fx_*.png`（20 张） | ~1.3MB | 压帧 / 减帧数 / TinyPNG |
 | `modals/*.png` | ~0.9MB | 压缩 + 勿超 @2x 分辨率 |
-| `icons/` + `settings/` | ~1.6MB | 小图勿上千像素宽 |
+| `merge/fx/merge_fx_*.png`（13 张） | 拼块融合序列帧 | 由 `videos/merge.mp4` 导出，单帧压缩后建议 ≤15KB |
 | `home-hero.png` | ~0.6MB | 压缩；确认是否可与网格二选一 |
 
 ### 暂不打包（功能隐藏）

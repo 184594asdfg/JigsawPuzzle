@@ -13,6 +13,7 @@ var assets = require('../assets')
 var draw = require('../draw')
 var settings = require('../../utils/settings')
 var sfx = require('../sfx')
+var mergeFx = require('../merge-fx')
 
 var SRC_IMAGE_W = 750
 var SRC_IMAGE_H = 1125
@@ -21,8 +22,12 @@ var ANIM_DUR = 220
 var HINT_ANIM_DUR = 2000
 /** 提示程序化拖动：只移到目标方向约八成，松手后再交换落位 */
 var HINT_DRAG_VISUAL_RATIO = 0.78
-/** 拼合：放大还原 + 光效，整段 400ms 内完成 */
-var MERGE_FX_DUR = 400
+/** 拼合：放大还原 + 序列帧光效（时长见 merge-fx.js） */
+var MERGE_FX_DUR = mergeFx.MERGE_FX_DUR_MS
+/** 光效边长 = 组合块短边 × 该比例，居中，避免铺满整块 */
+var MERGE_FX_SIZE_RATIO = 0.72
+/** 光效峰值不透明度（lighter 混合下略降，减轻发白） */
+var MERGE_FX_ALPHA = 0.62
 /** 拼合组块放大峰值（1 + bump → 1.04） */
 var MERGE_PULSE_BUMP = 0.04
 /** 放大→还原在合并动画时长中的占比（前段抬起、后段落回） */
@@ -53,10 +58,6 @@ function introStaggerMs(pieceCount) {
 
 var SOUND_MOVE = 'audio/move.mp3'
 var SOUND_SWAP = 'audio/swap.mp3'
-/** 相邻正确块拼合成组 */
-var SOUND_MERGE = 'audio/merge.mp3'
-var SOUND_MERGE_VOLUME = 0.82
-var MERGE_FX_IMAGE = 'images/merge_fx.png'
 /** 开局发牌/翻面时的牌背图（2:3，铺满单块内层裁切区） */
 var CARD_BACK_IMAGE = 'images/puzzle-card-back.png'
 /** 每格原位半透明占位（拖拽/交换动画时露出） */
@@ -76,6 +77,18 @@ function mergePulseScale(t) {
     return 1 + MERGE_PULSE_BUMP * easeOutCubic(t / MERGE_PULSE_PEAK_AT)
   }
   return 1 + MERGE_PULSE_BUMP * (1 - easeOutCubic((t - MERGE_PULSE_PEAK_AT) / (1 - MERGE_PULSE_PEAK_AT)))
+}
+
+/** 组合块外接矩形内居中取方形光效区域（按短边缩放） */
+function mergeFxRectFromGroup(gx, gy, gw, gh) {
+  var base = Math.min(gw, gh)
+  var size = base * MERGE_FX_SIZE_RATIO
+  return {
+    x: gx + (gw - size) / 2,
+    y: gy + (gh - size) / 2,
+    w: size,
+    h: size
+  }
 }
 
 function fisherYatesShuffle(arr) {
@@ -126,22 +139,18 @@ PuzzleEngine.prototype._initAudio = function () {
   try {
     this._moveAudio = wx.createInnerAudioContext()
     this._swapAudio = wx.createInnerAudioContext()
-    this._mergeAudio = wx.createInnerAudioContext()
     this._moveAudio.src = SOUND_MOVE
     this._swapAudio.src = SOUND_SWAP
-    this._mergeAudio.src = SOUND_MERGE
-    this._mergeAudio.volume = SOUND_MERGE_VOLUME
-    this._mergeAudio.obeyMuteSwitch = false
+    this._moveAudio.obeyMuteSwitch = false
+    this._swapAudio.obeyMuteSwitch = false
   } catch (e) {
     this._moveAudio = null
     this._swapAudio = null
-    this._mergeAudio = null
   }
 }
 PuzzleEngine.prototype.destroy = function () {
   if (this._moveAudio) { this._moveAudio.destroy && this._moveAudio.destroy(); this._moveAudio = null }
   if (this._swapAudio) { this._swapAudio.destroy && this._swapAudio.destroy(); this._swapAudio = null }
-  if (this._mergeAudio) { this._mergeAudio.destroy && this._mergeAudio.destroy(); this._mergeAudio = null }
 }
 PuzzleEngine.prototype.setSfxEnabled = function (enabled) {
   this.sfxEnabled = !!enabled
@@ -404,24 +413,24 @@ PuzzleEngine.prototype._snapshotGroupSizes = function () {
   return sizes
 }
 
-PuzzleEngine.prototype._findMergedGroup = function (movedIds, sizeBefore) {
-  var movedSet = {}
-  for (var i = 0; i < movedIds.length; i++) movedSet[movedIds[i]] = true
+PuzzleEngine.prototype._findMergedGroup = function (sizeBefore) {
   var best = null
+  var bestGrowth = 0
   var groups = this._findAllGroups()
   for (var k = 0; k < groups.length; k++) {
     var ids = groups[k]
     if (ids.length < 2) continue
-    var touch = false
     var maxPrev = 1
     for (var m = 0; m < ids.length; m++) {
-      var id = ids[m]
-      if (movedSet[id]) touch = true
-      var sz = sizeBefore[id] || 1
+      var sz = sizeBefore[ids[m]] || 1
       if (sz > maxPrev) maxPrev = sz
     }
-    if (touch && ids.length > maxPrev) {
-      if (!best || ids.length > best.length) best = ids
+    var growth = ids.length - maxPrev
+    if (growth <= 0) continue
+    if (!best || growth > bestGrowth ||
+      (growth === bestGrowth && ids.length > best.length)) {
+      best = ids
+      bestGrowth = growth
     }
   }
   return best
@@ -905,20 +914,27 @@ PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow,
 
 PuzzleEngine.prototype._renderMergeFx = function (ctx, bx, by) {
   var fx = this._mergeFx
-  var img = assets.get(MERGE_FX_IMAGE)
-  if (!img) return
-  var t = fx.t
-  var alpha = t < 0.2 ? (t / 0.2) : (t > 0.7 ? Math.max(0, 1 - (t - 0.7) / 0.3) : 1)
-  var scale = mergePulseScale(t)
+  if (!fx || fx.t == null) return
+  var path = mergeFx.framePath(mergeFx.frameIndexAt(fx.t))
+  var img = assets.get(path)
+  if (!img) {
+    assets.tryLoad(path)
+    return
+  }
+  var fade = fx.t < 0.15 ? (fx.t / 0.15) : (fx.t > 0.85 ? Math.max(0, 1 - (fx.t - 0.85) / 0.15) : 1)
+  var alpha = fade * MERGE_FX_ALPHA
+  var scale = mergePulseScale(fx.t)
+  var dx = bx + fx.x
+  var dy = by + fx.y
   ctx.save()
   ctx.globalAlpha = alpha
   ctx.globalCompositeOperation = 'lighter'
-  var cx = bx + fx.x + fx.w / 2
-  var cy = by + fx.y + fx.h / 2
+  var cx = dx + fx.w / 2
+  var cy = dy + fx.h / 2
   ctx.translate(cx, cy)
   ctx.scale(scale, scale)
   ctx.translate(-cx, -cy)
-  draw.drawImageContain(ctx, img, bx + fx.x, by + fx.y, fx.w, fx.h)
+  draw.drawImageContain(ctx, img, dx, dy, fx.w, fx.h)
   ctx.restore()
 }
 
@@ -1299,21 +1315,21 @@ PuzzleEngine.prototype._commitMove = function (memberIds, newSlotById, assignmen
   }
 
   // 5) 合并特效
-  var mergedIds = this._findMergedGroup(memberIds, sizeBefore)
+  var mergedIds = this._findMergedGroup(sizeBefore)
   if (mergedIds) {
     var mg = this._pickGroupByMembers(mergedIds)
     if (mg) {
-      var pad = 8
+      var fxBox = mergeFxRectFromGroup(mg.x, mg.y, mg.w, mg.h)
       this._mergeFx = {
         groupId: mg.id,
-        x: Math.max(0, mg.x - pad),
-        y: Math.max(0, mg.y - pad),
-        w: mg.w + pad * 2,
-        h: mg.h + pad * 2,
+        x: fxBox.x,
+        y: fxBox.y,
+        w: fxBox.w,
+        h: fxBox.h,
         t0: now,
         t: 0
       }
-      this._playSound(this._mergeAudio)
+      if (this.sfxEnabled) sfx.playMerge()
     }
   }
 

@@ -9,8 +9,8 @@ var SRC = {
   intro_flip: 'audio/intro_flip.mp3',
   /** 关卡通关（拼图胜利） */
   win: 'audio/win.mp3',
-  /** 倒计时归零（时间耗尽遮罩） */
-  timeup: 'audio/timeup.mp3'
+  /** 拼图块拼合成组 */
+  merge: 'audio/merge.mp3'
 }
 
 /**
@@ -23,7 +23,8 @@ var VOLUME = {
   intro_flip: 0.75,
   win: 0.85,
   /** 提示音，略低于通关，避免与 BGM 抢戏 */
-  timeup: 0.8
+  timeup: 0.8,
+  merge: 0.82
 }
 
 var pool = {}
@@ -76,6 +77,10 @@ function playTimeup() {
   play('timeup')
 }
 
+function playMerge() {
+  play('merge')
+}
+
 function wrapClick(fn) {
   return function () {
     playClick()
@@ -91,5 +96,6 @@ module.exports = {
   playIntroFlip: playIntroFlip,
   playWin: playWin,
   playTimeup: playTimeup,
+  playMerge: playMerge,
   wrapClick: wrapClick
 }

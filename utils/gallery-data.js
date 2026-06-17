@@ -188,9 +188,12 @@ function hasThemeLevels(theme) {
 }
 
 function loadThemes(opts) {
+  opts = opts || {}
+  if (opts.force) loadingPromise = null
+
   if (loadingPromise) return loadingPromise
 
-  var summary = !opts || opts.summary !== false
+  var summary = opts.summary !== false
 
   loadingPromise = jigsawApi.fetchThemes({ summary: summary }).then(function (list) {
     if (!list) list = []

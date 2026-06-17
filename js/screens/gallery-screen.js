@@ -11,6 +11,7 @@ var assets = require('../assets')
 var draw = require('../draw')
 var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
+var remoteSync = require('../../utils/remote-sync')
 var prefetch = require('../../utils/prefetch')
 var sfx = require('../sfx')
 var pressAnim = require('../press-anim')
@@ -63,9 +64,7 @@ GalleryScreen.prototype.onEnter = function (manager) {
 
 GalleryScreen.prototype.onResume = function () {
   var self = this
-  galleryData.loadThemes({ summary: true }).then(function () {
-    return progress.loadFromServer()
-  }).then(function () {
+  remoteSync.syncOnEnter().then(function () {
     self._refresh()
     prefetch.prefetchNextLevelAssets()
   }).catch(function () {
