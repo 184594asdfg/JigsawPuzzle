@@ -9,6 +9,8 @@ var SRC = {
   intro_flip: 'audio/intro_flip.mp3',
   /** 关卡通关（拼图胜利） */
   win: 'audio/win.mp3',
+  /** 倒计时归零（时间耗尽遮罩） */
+  timeup: 'audio/timeup.mp3',
   /** 拼图块拼合成组 */
   merge: 'audio/merge.mp3'
 }
