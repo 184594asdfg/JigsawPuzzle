@@ -7,10 +7,10 @@ var config = require('./app-config')
 var DEFAULT_GRID = config.defaultGrid || 4
 var LEVELS_PER_THEME = 25
 
-/** 图集关卡格 1x 缩略图（CDN imageView2，与 bookSnap 一致） */
-var GALLERY_THUMB_W = 180
-var GALLERY_THUMB_H = 266
-var GALLERY_THUMB_QUALITY = 85
+/** 图集关卡格 2x 缩略图（CDN imageView2；屏上约 110×165 逻辑 px） */
+var GALLERY_THUMB_W = 360
+var GALLERY_THUMB_H = 532
+var GALLERY_THUMB_QUALITY = 90
 
 var THEME_CARD_UNLOCKED = 'images/themes/theme-unlocked.png'
 var THEME_CARD_LOCKED = 'images/themes/theme-locked.png'

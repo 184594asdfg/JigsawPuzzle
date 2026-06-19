@@ -123,6 +123,11 @@ function clearFailed(src) {
   delete cache[src]
 }
 
+function clear(src) {
+  if (!src || !cache[src]) return
+  delete cache[src]
+}
+
 function retryLoad(src) {
   clearFailed(src)
   return load(src)
@@ -136,6 +141,7 @@ module.exports = {
   hasFailed: hasFailed,
   isLoading: isLoading,
   clearFailed: clearFailed,
+  clear: clear,
   retryLoad: retryLoad,
   size: size
 }

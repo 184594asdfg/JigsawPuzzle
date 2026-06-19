@@ -23,6 +23,7 @@ var tools = require('../../utils/tools')
 var pressAnim = require('../press-anim')
 var sfx = require('../sfx')
 var rewardedAd = require('../rewarded-ad')
+var user = require('../../utils/user')
 
 /** 倒计时区域（rpx）：只设宽度，水平居中，无左右边距 */
 var COUNTDOWN_WIDTH_RPX = 170
@@ -829,6 +830,8 @@ PuzzleScreen.prototype._startPressAnim = function (id) {
 }
 
 PuzzleScreen.prototype._closeSettings = function () {
+  user.destroyProfileButton()
+  user.clearProfileAuthorizePending()
   this.showSettings = false
   settingsModal.clearSettingsEnter(this)
 }

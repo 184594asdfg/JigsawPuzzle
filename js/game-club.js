@@ -11,12 +11,10 @@ var GAME_CLUB_OPENLINK =
   '-SSEykJvFV3pORt5kTNpS_iD7m81-TZqwFPY3aNvDwq7Q2mpwInqioyXyVRuBjcUVUBznEtzYcgjOKCjbcrinHQM0833sGNPOWwMnvf0fSs5jK6lMzyzCFDcpDW4rR_ku_mCB2mCfBx6FIml-l0TUFj6Y-L_Rcij88kDiJRUk9eO59Z71BF7CZYfDlWbGX-9IGDdpvY1noIdFrE5ZEXPHgmBvIK_Lv1MKUi0JsKpNgfc5DWkVwRvtyZbmrVCMplxW5pAzcfhy9viy-oUOZB7yejuQM7N7OMGAfKjls9ga6WRr7M4mFKDPmJXnfDkDwk_AfXosuIUVh3Qc9mhI3gOHg'
 
 var GAME_CLUB_ICON = 'images/icons/game-club.png'
-var GAME_CLUB_SIZE_RPX = 72
+var GAME_CLUB_SIZE_RPX = 88
 var GAME_CLUB_LEFT_RPX = 16
 var GAP_BELOW_SETTINGS_RPX = 8
 var GAP_ABOVE_HERO_RPX = 8
-/** 相对「设置正下方」的垂直偏移，负值上移 */
-var POSITION_OFFSET_Y_RPX = 0
 /** 无图标时的占位底色 */
 var PLACEHOLDER_BG = 'rgba(109, 168, 150, 0.92)'
 
@@ -40,11 +38,16 @@ function navHitRect(navY, navH, heroTopY, expand) {
   var settings = getSettingsNavRect(navY, navH)
   var size = rpx.rpx(GAME_CLUB_SIZE_RPX)
   var x = rpx.rpx(GAME_CLUB_LEFT_RPX)
-  var minY = settings.y + settings.h + rpx.rpx(GAP_BELOW_SETTINGS_RPX)
-  var y = minY + rpx.rpx(POSITION_OFFSET_Y_RPX)
+  var slotTop = settings.y + settings.h + rpx.rpx(GAP_BELOW_SETTINGS_RPX)
+  var y = slotTop
   if (heroTopY != null && heroTopY > 0) {
-    var maxY = heroTopY - size - rpx.rpx(GAP_ABOVE_HERO_RPX)
-    if (y > maxY) y = maxY
+    var slotBottom = heroTopY - rpx.rpx(GAP_ABOVE_HERO_RPX)
+    var slotH = slotBottom - slotTop
+    if (slotH >= size) {
+      y = slotTop + (slotH - size) / 2
+    } else {
+      y = Math.max(slotTop, slotBottom - size)
+    }
   }
   var pad = expand ? rpx.rpx(16) : 0
   return {
@@ -86,7 +89,7 @@ function drawNavIcon(ctx, navY, navH, heroTopY, scale) {
     draw.fillRoundedRect(ctx, rect.x, rect.y, rect.w, rect.h, radius, PLACEHOLDER_BG)
     draw.fillTextCentered(
       ctx, '圈', rect.cx, rect.cy,
-      '600 ' + rpx.rpx(26).toFixed(0) + 'px sans-serif', '#ffffff'
+      '600 ' + rpx.rpx(30).toFixed(0) + 'px sans-serif', '#ffffff'
     )
   }
 

@@ -157,6 +157,9 @@ function markLevelComplete(levelKey) {
   jigsawApi.saveProgress(userId, levelKey).then(function (data) {
     if (!data) return
     applyServerData(data, { authoritative: true })
+    try {
+      require('./rank-data').refreshNational()
+    } catch (e) {}
   }).catch(function (err) {
     console.warn('[progress] save to server failed', err)
     // 保留本地乐观更新，避免通关后仍显示关卡 1

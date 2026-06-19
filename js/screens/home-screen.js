@@ -17,6 +17,8 @@ var jigsawShape = require('../jigsaw-shape')
 var heroSliceSnap = require('../hero-slice-snap')
 var shareNav = require('../share')
 var gameClub = require('../game-club')
+var rankModal = require('../../utils/rank-modal')
+var user = require('../../utils/user')
 
 var HOME_BG = 'images/home-bg.jpg'
 var subpackUi = require('../../utils/subpack-ui')
@@ -26,8 +28,8 @@ var HOME_HERO_GRID_BG = 'images/home-hero-grid-bg.png'
 var ICON_RANK = 'images/icons/rank.png'
 var ICON_LEVEL = 'images/icons/level.png'
 var ICON_GALLERY = 'images/icons/gallery.png'
-/** 首页底部排行入口（暂时隐藏） */
-var SHOW_RANK_BTN = false
+/** 首页底部排行入口 */
+var SHOW_RANK_BTN = true
 
 // 底部侧钮尺寸（排行 / 图库）
 var SIDE_BTN_W_RPX = 110
@@ -185,7 +187,6 @@ function HomeScreen() {
   BaseScreen.call(this)
   this.showRank = false
   this.showSettings = false
-  this.rankTab = 'friends'
   this.rankScrollY = 0
   this._rankDrag = null
   this._sideButtonRects = {}
@@ -271,6 +272,7 @@ HomeScreen.prototype._tryStartSliceSnap = function (layout) {
 
 HomeScreen.prototype.update = function (dt) {
   if (this.showSettings) settingsModal.tickSettingsEnter(this, dt)
+  if (this.showRank) rankModal.tickEnter(this, dt)
   heroSliceSnap.tick(this)
   var tick = pressAnim.tickPressAnim(this._pressAnim, dt)
   this._pressAnim = tick.anim
@@ -344,16 +346,11 @@ HomeScreen.prototype.render = function (ctx) {
 
   this._drawBottomBar(ctx, layout)
 
-  // 排行榜弹窗
-  if (this.showRank) {
-    this._drawRankModal(ctx, W, H)
-  }
-
   if (this.showSettings) {
     this._drawSettingsModal(ctx, W, H)
   }
 
-  // 左上：设置 + 分享（分享在设置下方）
+  // 左上：设置 + 游戏圈（排行弹窗打开时仍先绘制，由弹窗遮罩盖住）
   var self = this
   var anim = this._pressAnim
   var navY = layout.nav.y
@@ -385,6 +382,11 @@ HomeScreen.prototype.render = function (ctx) {
         self._startPressAnim('share')
       })
     }
+  }
+
+  // 排行榜弹窗 — 最上层绘制，遮罩盖住设置/游戏圈等导航图标
+  if (this.showRank) {
+    this._drawRankModal(ctx, W, H)
   }
 }
 
@@ -538,246 +540,8 @@ HomeScreen.prototype._drawSideIcon = function (ctx, src, cx, cy, w, h, scale) {
 // ---------------------------------------------------------------------------
 
 HomeScreen.prototype._drawRankModal = function (ctx, W, H) {
-  // 遮罩 — 点遮罩外可关闭
-  ctx.fillStyle = 'rgba(30,30,50,0.55)'
-  ctx.fillRect(0, 0, W, H)
   var self = this
-  this.addHitZone({ x: 0, y: 0, w: W, h: H }, function () { self._closeRank() })
-
-  var padX = rpx.rpx(32)
-  var padY = rpx.rpx(48) + rpx.safeTop() * 0.2
-  var modalX = padX
-  var modalY = padY
-  var modalW = W - padX * 2
-  var modalH = H - padY * 2 - rpx.safeBottom()
-  draw.fillRoundedRect(ctx, modalX, modalY, modalW, modalH, rpx.rpx(28), '#e8f2ef')
-
-  // 拦截点击穿透：注册一个空 hit zone 覆盖弹窗本身
-  this.addHitZone({ x: modalX, y: modalY, w: modalW, h: modalH }, function () {})
-
-  // 标题
-  draw.fillTextCentered(
-    ctx, '排行', modalX + modalW / 2, modalY + rpx.rpx(48),
-    '600 ' + rpx.rpx(34).toFixed(0) + 'px sans-serif', '#3d5a52'
-  )
-
-  // 关闭按钮
-  var closeX = modalX + modalW - rpx.rpx(48)
-  var closeY = modalY + rpx.rpx(48)
-  draw.fillTextCentered(
-    ctx, '×', closeX, closeY,
-    '400 ' + rpx.rpx(44).toFixed(0) + 'px sans-serif', '#7a9a90'
-  )
-  var closeRect = {
-    x: closeX - rpx.rpx(32), y: closeY - rpx.rpx(32),
-    w: rpx.rpx(64), h: rpx.rpx(64)
-  }
-  this.addHitZone(closeRect, function () { self._closeRank() })
-
-  // Tabs
-  var tabsY = modalY + rpx.rpx(96)
-  var tabsX = modalX + rpx.rpx(28)
-  var tabsW = modalW - rpx.rpx(56)
-  var tabsH = rpx.rpx(72)
-  draw.fillRoundedRect(ctx, tabsX, tabsY, tabsW, tabsH, rpx.rpx(36), '#d8ebe5')
-  var tabW = tabsW / 2
-  // active 背景
-  var activeIdx = this.rankTab === 'national' ? 1 : 0
-  draw.fillRoundedRect(
-    ctx,
-    tabsX + activeIdx * tabW + rpx.rpx(6),
-    tabsY + rpx.rpx(6),
-    tabW - rpx.rpx(12),
-    tabsH - rpx.rpx(12),
-    rpx.rpx(30),
-    '#ffffff'
-  )
-  draw.fillTextCentered(
-    ctx, '好友', tabsX + tabW / 2, tabsY + tabsH / 2,
-    (activeIdx === 0 ? '600 ' : '400 ') + rpx.rpx(26).toFixed(0) + 'px sans-serif',
-    activeIdx === 0 ? '#3d5a52' : '#6d8f84'
-  )
-  draw.fillTextCentered(
-    ctx, '全国', tabsX + tabW + tabW / 2, tabsY + tabsH / 2,
-    (activeIdx === 1 ? '600 ' : '400 ') + rpx.rpx(26).toFixed(0) + 'px sans-serif',
-    activeIdx === 1 ? '#3d5a52' : '#6d8f84'
-  )
-  this.addHitZone(
-    { x: tabsX, y: tabsY, w: tabW, h: tabsH },
-    function () { self._switchTab('friends') }
-  )
-  this.addHitZone(
-    { x: tabsX + tabW, y: tabsY, w: tabW, h: tabsH },
-    function () { self._switchTab('national') }
-  )
-
-  // 我的排名（贴底）
-  var myH = rpx.rpx(140)
-  var myMarginX = rpx.rpx(20)
-  var myY = modalY + modalH - myH - rpx.rpx(20)
-  draw.fillRoundedRect(
-    ctx, modalX + myMarginX, myY,
-    modalW - myMarginX * 2, myH,
-    rpx.rpx(20), '#6da896'
-  )
-  var my = rankData.getMyRank(this.rankTab)
-  draw.fillTextLeft(
-    ctx, '我的排名', modalX + myMarginX + rpx.rpx(24),
-    myY + rpx.rpx(24),
-    '400 ' + rpx.rpx(20).toFixed(0) + 'px sans-serif',
-    'rgba(255,255,255,0.75)'
-  )
-  draw.fillTextLeft(
-    ctx, '第 ' + my.rank + ' 名',
-    modalX + myMarginX + rpx.rpx(24),
-    myY + rpx.rpx(60),
-    '700 ' + rpx.rpx(32).toFixed(0) + 'px sans-serif', '#ffffff'
-  )
-  draw.fillTextLeft(
-    ctx, my.name + ' · ' + my.levels + '关 · ' + my.time,
-    modalX + myMarginX + rpx.rpx(24),
-    myY + rpx.rpx(100),
-    '400 ' + rpx.rpx(22).toFixed(0) + 'px sans-serif', 'rgba(255,255,255,0.9)'
-  )
-
-  // 列表区裁剪
-  var listY = tabsY + tabsH + rpx.rpx(16)
-  var listBottom = myY - rpx.rpx(16)
-  var listH = Math.max(rpx.rpx(120), listBottom - listY)
-
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(modalX, listY, modalW, listH)
-  ctx.clip()
-
-  var fullList = rankData.getLeaderboard(this.rankTab)
-  if (this.rankTab === 'national' && rankData.isNationalLoading()) {
-    draw.fillTextCentered(
-      ctx, '加载中...', modalX + modalW / 2, listY + listH / 2,
-      '400 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', '#6d8f84'
-    )
-    ctx.restore()
-    return
-  }
-  if (this.rankTab === 'national' && rankData.isNationalLoaded() && !fullList.length) {
-    draw.fillTextCentered(
-      ctx, '暂无排行，快去通关吧', modalX + modalW / 2, listY + listH / 2,
-      '400 ' + rpx.rpx(26).toFixed(0) + 'px sans-serif', '#6d8f84'
-    )
-    ctx.restore()
-    return
-  }
-
-  var top3 = fullList.slice(0, 3)
-
-  // 滚动内容容器
-  var contentY = listY - this.rankScrollY
-
-  // 领奖台
-  var podiumY = contentY
-  var podiumH = rpx.rpx(180)
-  this._drawPodium(ctx, modalX, podiumY, modalW, podiumH, top3)
-
-  // 列表
-  var rowsTopY = podiumY + podiumH + rpx.rpx(8)
-  var rowX = modalX + rpx.rpx(20)
-  var rowW = modalW - rpx.rpx(40)
-  var rowH = rpx.rpx(88)
-
-  // 列表整体卡片底色
-  var rowsCount = 0
-  for (var ri = 0; ri < fullList.length; ri++) {
-    if (fullList[ri].rank > 3) rowsCount++
-  }
-  var rowsBlockH = rowsCount * rowH
-  draw.fillRoundedRect(ctx, rowX, rowsTopY, rowW, rowsBlockH, rpx.rpx(20), '#ffffff')
-
-  var rowY = rowsTopY
-  for (var i = 0; i < fullList.length; i++) {
-    var item = fullList[i]
-    if (item.rank <= 3) continue
-    this._drawRankRow(ctx, item, rowX, rowY, rowW, rowH)
-    rowY += rowH
-  }
-
-  ctx.restore()
-
-  // 计算可滚动范围
-  var contentHeight = (podiumH + rpx.rpx(8) + rowsBlockH)
-  this._rankMaxScroll = Math.max(0, contentHeight - listH)
-  this._rankListRect = { x: modalX, y: listY, w: modalW, h: listH }
-}
-
-HomeScreen.prototype._drawPodium = function (ctx, x, y, w, h, top3) {
-  var slotW = w / 3
-  var slotMaxBarH = h - rpx.rpx(56)
-  var bar1 = slotMaxBarH
-  var bar2 = slotMaxBarH * 0.75
-  var bar3 = slotMaxBarH * 0.55
-
-  var slots = [
-    { idx: 1, barH: bar2, opacity: 0.8 },
-    { idx: 0, barH: bar1, opacity: 1 },
-    { idx: 2, barH: bar3, opacity: 0.6 }
-  ]
-  var medals = ['🥇', '🥈', '🥉']
-  for (var i = 0; i < slots.length; i++) {
-    var s = slots[i]
-    var cx = x + slotW * i + slotW / 2
-    var bottomY = y + h
-    var barTop = bottomY - s.barH
-    var barW = slotW * 0.5
-    ctx.fillStyle = 'rgba(109, 168, 150, ' + s.opacity + ')'
-    ctx.fillRect(cx - barW / 2, barTop, barW, s.barH)
-    var t = top3[s.idx]
-    if (t) {
-      draw.fillTextCentered(
-        ctx, medals[s.idx], cx, barTop - rpx.rpx(40),
-        '400 ' + rpx.rpx(s.idx === 0 ? 44 : 36).toFixed(0) + 'px sans-serif', '#000'
-      )
-      draw.fillTextCentered(
-        ctx, t.name, cx, barTop + rpx.rpx(18),
-        '600 ' + rpx.rpx(22).toFixed(0) + 'px sans-serif', '#3d5a52'
-      )
-      draw.fillTextCentered(
-        ctx, t.levels + '关', cx, barTop + rpx.rpx(46),
-        '400 ' + rpx.rpx(20).toFixed(0) + 'px sans-serif', '#7a9a90'
-      )
-    }
-  }
-}
-
-HomeScreen.prototype._drawRankRow = function (ctx, item, x, y, w, h) {
-  var padX = rpx.rpx(20)
-  draw.fillTextCentered(
-    ctx, '' + item.rank, x + padX + rpx.rpx(12), y + h / 2,
-    '600 ' + rpx.rpx(26).toFixed(0) + 'px sans-serif', '#8aa89c'
-  )
-  var avatarX = x + padX + rpx.rpx(44)
-  ctx.fillStyle = '#d8ebe5'
-  ctx.beginPath()
-  ctx.arc(avatarX + rpx.rpx(28), y + h / 2, rpx.rpx(28), 0, Math.PI * 2)
-  ctx.fill()
-  draw.fillTextCentered(
-    ctx, '' + item.rank, avatarX + rpx.rpx(28), y + h / 2,
-    '600 ' + rpx.rpx(22).toFixed(0) + 'px sans-serif', '#5c8a7a'
-  )
-  var textX = avatarX + rpx.rpx(72)
-  draw.fillTextLeft(
-    ctx, item.name, textX, y + h / 2 - rpx.rpx(14),
-    '600 ' + rpx.rpx(26).toFixed(0) + 'px sans-serif', '#3d5a52'
-  )
-  draw.fillTextLeft(
-    ctx, item.levels + '关 · ' + item.time, textX, y + h / 2 + rpx.rpx(16),
-    '400 ' + rpx.rpx(22).toFixed(0) + 'px sans-serif', '#8aa89c'
-  )
-  // 分隔线
-  ctx.strokeStyle = '#eef5f2'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(x + padX, y + h - 0.5)
-  ctx.lineTo(x + w - padX, y + h - 0.5)
-  ctx.stroke()
+  rankModal.draw(this, ctx, W, H, rankData, function () { self._closeRank() })
 }
 
 // ---------------------------------------------------------------------------
@@ -865,15 +629,17 @@ HomeScreen.prototype._startPressAnim = function (id) {
 }
 
 HomeScreen.prototype._openRank = function () {
-  var self = this
+  rankModal.preload()
+  rankModal.beginEnter(this)
   this.showRank = true
   this.rankScrollY = 0
-  if (this.rankTab === 'national') {
-    rankData.loadNationalRank()
-  }
+  rankData.refreshNational()
 }
 HomeScreen.prototype._closeRank = function () {
   sfx.playClick()
+  user.destroyProfileButton()
+  user.clearProfileAuthorizePending()
+  rankModal.clearEnter(this)
   this.showRank = false
 }
 HomeScreen.prototype._openSettings = function () {
@@ -883,6 +649,8 @@ HomeScreen.prototype._openSettings = function () {
 }
 HomeScreen.prototype._closeSettings = function () {
   if (this._settingsCloseLockUntil && Date.now() < this._settingsCloseLockUntil) return
+  user.destroyProfileButton()
+  user.clearProfileAuthorizePending()
   this.showSettings = false
   settingsModal.clearSettingsEnter(this)
   this._settingsCloseLockUntil = 0
@@ -893,12 +661,6 @@ HomeScreen.prototype._drawSettingsModal = function (ctx, W, H) {
     showActionButtons: false,
     onClose: function () { self._closeSettings() }
   })
-}
-HomeScreen.prototype._switchTab = function (tab) {
-  if (tab === this.rankTab) return
-  this.rankTab = tab
-  this.rankScrollY = 0
-  if (tab === 'national') rankData.loadNationalRank()
 }
 HomeScreen.prototype._openGallery = function () {
   var GalleryScreen = require('./gallery-screen')

@@ -13,6 +13,8 @@ var settingsModal = require('./settings-modal')
 var share = require('./share')
 var gameClub = require('./game-club')
 var subpackUi = require('../utils/subpack-ui')
+var user = require('../utils/user')
+require('../utils/rank-modal')
 
 var canvas = wx.createCanvas()
 var ctx = canvas.getContext('2d')
@@ -44,12 +46,19 @@ var CORE_ASSETS = [
   'images/home-hero-grid-bg.png',
   'images/icons/level.png',
   'images/icons/gallery.png',
+  'images/icons/rank.png',
   'images/icons/setting.png',
   'images/icons/game-club.png',
   'images/themes/theme-unlocked.png',
   'images/themes/theme-locked.png',
   'images/themes/level-placeholder.png',
-  'images/puzzle-card-back.png'
+  'images/puzzle-card-back.png',
+  'images/rank/rank_modal.png',
+  'images/rank/rank_row.png',
+  'images/rank/rank_my_row.png',
+  'images/rank/rank_1.png',
+  'images/rank/rank_2.png',
+  'images/rank/rank_3.png'
 ]
 
 /** splash.phase: loading | done */

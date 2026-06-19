@@ -53,6 +53,7 @@ module.exports = {
     themes: '/jigsaw/themes',
     progress: '/jigsaw/progress',
     rank: '/jigsaw/rank',
+    profile: '/user/wxProfile',
     tools: '/jigsaw/tools'
   },
   /**

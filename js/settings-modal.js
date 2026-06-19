@@ -37,8 +37,6 @@ function clearSettingsEnter(screen) {
   screen._settingsEnterAnim = null
 }
 
-var AVATAR_BG = 'images/settings/avatar-bg.png'
-
 /** 开关显示区（862 设计稿）；资源图为 530×144 @2x */
 var ICON_W = 265
 var ICON_H = 72
@@ -142,7 +140,6 @@ function getImageNoBg(path) {
 function preload() {
   assets.load(MODAL_IMAGE)
   assets.load(NAV_ICON)
-  assets.load(AVATAR_BG)
   for (var i = 0; i < ICON_ROWS.length; i++) {
     assets.load(ICON_ROWS[i].offPath)
     assets.load(ICON_ROWS[i].onPath)
@@ -229,6 +226,45 @@ function drawToggleIcon(ctx, slot, path) {
   ctx.drawImage(img, slot.x, slot.y, slot.w, slot.h)
 }
 
+function drawUserAvatar(ctx, modal, av, display) {
+  var sx = modal.w / SRC_W
+  var cx = av.x + av.w / 2
+  var cy = av.y + av.h / 2
+  var radius = Math.min(av.w, av.h) / 2
+  var displayName = user.resolveNickname(display.name)
+  var avatarUrl = user.resolveAvatarUrl(display.avatarUrl)
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+  ctx.clip()
+  var img = null
+  if (avatarUrl) {
+    assets.tryLoad(avatarUrl)
+    img = assets.get(avatarUrl)
+  }
+  if (img) {
+    draw.drawImageCover(ctx, img, av.x, av.y, av.w, av.h)
+  } else {
+    ctx.fillStyle = '#c5e8dc'
+    ctx.fillRect(av.x, av.y, av.w, av.h)
+    draw.fillTextCentered(
+      ctx, displayName.charAt(0), cx, cy,
+      '600 ' + Math.round(42 * sx) + 'px sans-serif', '#5c8a7a'
+    )
+  }
+  ctx.restore()
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = Math.max(1, 3 * sx)
+  ctx.beginPath()
+  ctx.arc(cx, cy, radius - sx, 0, Math.PI * 2)
+  ctx.stroke()
+}
+
+function getAvatarHitRect(W, H) {
+  var modal = computeModalRect(W, H)
+  return mapDesignRect(modal, USER_LAYOUT.avatar.x, USER_LAYOUT.avatar.y, USER_LAYOUT.avatar.w, USER_LAYOUT.avatar.h)
+}
+
 function drawOverlay(screen, ctx, modal, handlers, canInteract) {
   var sx = modal.w / SRC_W
   var ul = USER_LAYOUT
@@ -236,26 +272,23 @@ function drawOverlay(screen, ctx, modal, handlers, canInteract) {
 
   var av = mapDesignRect(modal, ul.avatar.x, ul.avatar.y, ul.avatar.w, ul.avatar.h)
   var display = user.getDisplayInfo()
-  var avatarImg = assets.get(AVATAR_BG)
-  if (avatarImg) {
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(av.x + av.w / 2, av.y + av.h / 2, Math.min(av.w, av.h) / 2, 0, Math.PI * 2)
-    ctx.clip()
-    ctx.drawImage(avatarImg, av.x, av.y, av.w, av.h)
-    ctx.restore()
-  } else {
-    ctx.fillStyle = 'rgba(180, 220, 190, 0.85)'
-    ctx.beginPath()
-    ctx.arc(av.x + av.w / 2, av.y + av.h / 2, Math.min(av.w, av.h) / 2, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(120, 170, 130, 0.6)'
-    ctx.lineWidth = Math.max(1, 2 * sx)
-    ctx.stroke()
+  drawUserAvatar(ctx, modal, av, display)
+
+  if (canInteract) {
+    user.syncProfileButton(av, user.needsProfilePrompt())
+    screen.addHitZone(av, function () {
+      user.requestWxProfileFromTap(av).then(function () {
+        try {
+          wx.showToast({ title: '资料已更新', icon: 'success' })
+        } catch (e) {}
+      }).catch(function (err) {
+        user.showProfileError(err)
+      })
+    })
   }
 
   draw.fillTextLeft(
-    ctx, display.name,
+    ctx, user.resolveNickname(display.name),
     modal.x + ul.name.x * sx, modal.y + ul.name.y * sx,
     '700 ' + Math.round(ul.name.font * sx) + 'px sans-serif', ul.name.color
   )
@@ -380,6 +413,7 @@ module.exports = {
   drawNavIcon: drawNavIcon,
   drawModal: drawModal,
   computeModalRect: computeModalRect,
+  getAvatarHitRect: getAvatarHitRect,
   beginSettingsEnter: beginSettingsEnter,
   clearSettingsEnter: clearSettingsEnter,
   tickSettingsEnter: tickSettingsEnter
