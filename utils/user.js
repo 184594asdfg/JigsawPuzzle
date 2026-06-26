@@ -37,33 +37,9 @@ function isDevelopEnv() {
   }
 }
 
-function showDevelopProfileHint() {
-  try {
-    wx.showToast({
-      title: '真机调试下隐私授权可能不可用，请用体验版测试',
-      icon: 'none',
-      duration: 3500
-    })
-  } catch (e) {}
-}
-
 function canUseWxProfileAuth() {
   if (isDevtools()) return false
   return !!(typeof wx !== 'undefined' && wx.getUserProfile)
-}
-
-function canUseWxProfileButton() {
-  return canUseWxProfileAuth()
-}
-
-function showProfileEnvHint() {
-  try {
-    wx.showToast({
-      title: '请在手机微信真机中授权',
-      icon: 'none',
-      duration: 3000
-    })
-  } catch (e) {}
 }
 
 function trimText(value) {
@@ -145,17 +121,6 @@ function getDisplayInfo() {
     return {
       name: name,
       subtitle: '暂无法同步进度，请检查网络',
-      avatarUrl: avatarUrl
-    }
-  }
-  if (!hasStoredProfile()) {
-    return {
-      name: name,
-      subtitle: isDevelopEnv()
-        ? '真机调试请用体验版；点击头像使用微信授权'
-        : (canUseWxProfileAuth()
-          ? '点击头像，使用微信授权获取昵称头像'
-          : '请用手机微信真机打开并点击头像'),
       avatarUrl: avatarUrl
     }
   }
@@ -283,9 +248,6 @@ function requestProfileViaUserInfoButton(style) {
       })
       profileButton = btn
       profileButtonRectKey = [rect.left, rect.top, rect.width, rect.height].join(',')
-      try {
-        wx.showToast({ title: '请再次点击头像授权', icon: 'none', duration: 2200 })
-      } catch (e) {}
       btn.onTap(function (res) {
         var info = parseButtonUserInfo(res)
         if (!info) {
@@ -308,31 +270,17 @@ function applyProfileUserInfo(userInfo) {
 
 function showProfileError(err, opts) {
   opts = opts || {}
+  if (isProfileCancel(err)) return
   var msg = ''
   if (err && err.errMsg) msg = String(err.errMsg)
   else if (err && err.message) msg = String(err.message)
   else if (err) msg = String(err)
   var lower = msg.toLowerCase()
-  if (!msg) return
-  if (isProfileCancel(err)) return
   try {
-    if (privacyProfile.isPrivacyGateError(err)) {
-      wx.showToast({ title: '请先同意隐私协议', icon: 'none', duration: 2500 })
-    } else if (lower.indexOf('getuserprofile') >= 0 || lower.indexOf('unsupported') >= 0) {
-      wx.showToast({ title: '请再次点击头像完成授权', icon: 'none', duration: 2500 })
-    } else if (lower.indexOf('upload') >= 0 || lower.indexOf('http') >= 0 || lower.indexOf('请求失败') >= 0 || lower.indexOf('network') >= 0) {
+    if (lower.indexOf('upload') >= 0 || lower.indexOf('http') >= 0 || lower.indexOf('请求失败') >= 0 || lower.indexOf('network') >= 0) {
       wx.showToast({ title: '资料同步失败，请检查网络', icon: 'none', duration: 2500 })
-    } else if (lower.indexOf('banned') >= 0 || msg.indexOf('-12034') >= 0 ||
-      lower.indexOf('no privacy api permission') >= 0) {
-      wx.showToast({
-        title: isDevelopEnv() ? '真机调试隐私未生效，请用体验版' : '隐私指引未生效，请重新上传体验版',
-        icon: 'none',
-        duration: 3500
-      })
     } else if (lower.indexOf('not logged in') >= 0) {
       wx.showToast({ title: '正在登录，请稍后再试', icon: 'none', duration: 2500 })
-    } else if (!opts.silent) {
-      wx.showToast({ title: '授权失败，请稍后重试', icon: 'none', duration: 2500 })
     }
   } catch (e) {}
   console.warn('[user] profile error', err)
@@ -354,17 +302,10 @@ function requestWxProfileFromTap(style) {
     return Promise.reject(new Error('not logged in'))
   }
   if (hasStoredProfile()) {
-    try {
-      wx.showToast({ title: '已设置头像昵称', icon: 'none', duration: 2000 })
-    } catch (e) {}
     return Promise.resolve(getUser())
   }
   if (isDevtools()) {
-    showProfileEnvHint()
     return Promise.reject(new Error('profile env unsupported'))
-  }
-  if (isDevelopEnv()) {
-    showDevelopProfileHint()
   }
 
   return privacyProfile.getUserProfileFromTap({ desc: PROFILE_DESC })
@@ -417,9 +358,7 @@ function syncProfileButton(style, active) {
       var info = parseButtonUserInfo(res)
       if (!info) return
       destroyProfileButton()
-      applyProfileUserInfo(info).then(function () {
-        try { wx.showToast({ title: '资料已更新', icon: 'success' }) } catch (e) {}
-      }).catch(showProfileError)
+      applyProfileUserInfo(info).catch(showProfileError)
     })
   } catch (e) {
     destroyProfileButton()
@@ -488,9 +427,7 @@ module.exports = {
   getDisplayInfo: getDisplayInfo,
   needsProfilePrompt: needsProfilePrompt,
   isDevelopEnv: isDevelopEnv,
-  showDevelopProfileHint: showDevelopProfileHint,
   canUseWxProfileAuth: canUseWxProfileAuth,
-  canUseWxProfileButton: canUseWxProfileButton,
   requestWxProfileFromTap: requestWxProfileFromTap,
   syncProfileButton: syncProfileButton,
   promptAndSyncProfile: promptAndSyncProfile,

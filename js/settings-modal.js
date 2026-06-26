@@ -277,11 +277,7 @@ function drawOverlay(screen, ctx, modal, handlers, canInteract) {
   if (canInteract) {
     user.syncProfileButton(av, user.needsProfilePrompt())
     screen.addHitZone(av, function () {
-      user.requestWxProfileFromTap(av).then(function () {
-        try {
-          wx.showToast({ title: '资料已更新', icon: 'success' })
-        } catch (e) {}
-      }).catch(function (err) {
+      user.requestWxProfileFromTap(av).catch(function (err) {
         user.showProfileError(err)
       })
     })

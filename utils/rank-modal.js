@@ -341,10 +341,10 @@ function getMyRowProfileStyle(modal) {
   var avatarX = rect.x + stripW + LAYOUT.textGap * sx + LAYOUT.avatarOffsetX * sx
   var avatarY = rect.y + (rect.h - avatarSize) / 2 + LAYOUT.contentOffsetY * sx
   return {
-    left: avatarX,
-    top: avatarY,
-    width: avatarSize,
-    height: avatarSize
+    x: avatarX,
+    y: avatarY,
+    w: avatarSize,
+    h: avatarSize
   }
 }
 
@@ -446,11 +446,7 @@ function drawModalContent(screen, ctx, W, H, rankDataApi, onClose, modal, canTap
     var myAvatar = getMyRowProfileStyle(modal)
     user.syncProfileButton(myAvatar, user.needsProfilePrompt())
     screen.addHitZone(myAvatar, function () {
-      user.requestWxProfileFromTap(myAvatar).then(function () {
-        try {
-          wx.showToast({ title: '资料已更新', icon: 'success' })
-        } catch (e) {}
-      }).catch(function (err) {
+      user.requestWxProfileFromTap(myAvatar).catch(function (err) {
         user.showProfileError(err)
       })
     })
