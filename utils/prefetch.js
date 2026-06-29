@@ -148,25 +148,28 @@ function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
     try { wx.showToast({ title: '关卡图片地址缺失', icon: 'none' }) } catch (e) {}
     return
   }
-  stamina.syncRegen()
-  if (!stamina.canPlay()) {
-    try {
-      wx.showToast({
-        title: '体力不足',
-        icon: 'none',
-        duration: 2000
-      })
-    } catch (e) {}
-    return
-  }
-  var delay = minDelayMs > 0 ? minDelayMs : 0
-  var loadP = prefetchLevelImage(resolved.image)
-  var waitP = delay > 0
-    ? new Promise(function (resolve) { setTimeout(resolve, delay) })
-    : Promise.resolve()
-  var uiP = subpackUi.preloadAll().catch(function () {})
-  Promise.all([loadP, waitP, uiP]).then(function () {
-    if (!stamina.consume(1)) {
+  stamina.loadFromStorage().then(function () {
+    if (!stamina.canPlay()) {
+      try {
+        wx.showToast({
+          title: '体力不足',
+          icon: 'none',
+          duration: 2000
+        })
+      } catch (e) {}
+      return
+    }
+    var delay = minDelayMs > 0 ? minDelayMs : 0
+    var loadP = prefetchLevelImage(resolved.image)
+    var waitP = delay > 0
+      ? new Promise(function (resolve) { setTimeout(resolve, delay) })
+      : Promise.resolve()
+    var uiP = subpackUi.preloadAll().catch(function () {})
+    return Promise.all([loadP, waitP, uiP]).then(function () {
+      return stamina.consume(1)
+    })
+  }).then(function (ok) {
+    if (!ok) {
       try { wx.showToast({ title: '体力不足', icon: 'none' }) } catch (e) {}
       return
     }

@@ -1,66 +1,110 @@
 /**
- * 体力：自然恢复上限 staminaMax；看广告 grantAdReward 可超过上限。
+ * 体力：本地仅存 current；倒计时仅会话内有效，重开不保留。
+ * 仅在线恢复（低于上限 10 分钟/点）；看广告可超上限。
  */
 var config = require('./app-config')
 
-var STORAGE_KEY = 'jigsaw_stamina_v1'
+var STORAGE_KEY = 'jigsaw_stamina_v2'
 var MAX_STAMINA = config.staminaMax || 5
 var AD_GRANT = config.staminaAdGrant || 15
-var REGEN_INTERVAL_MS = (config.staminaRegenMin || 30) * 60 * 1000
+var REGEN_INTERVAL_MS = (config.staminaRegenMin || 10) * 60 * 1000
 
-function loadRawState() {
+var cached = {
+  current: MAX_STAMINA,
+  maxStamina: MAX_STAMINA
+}
+var localRegenRemainingMs = 0
+var localRegenAnchorAt = 0
+var dirty = false
+
+function loadSavedCurrent() {
   try {
     var raw = wx.getStorageSync(STORAGE_KEY)
     if (raw && typeof raw === 'object' && raw.current != null) {
-      return {
-        current: Math.max(0, Math.floor(Number(raw.current))),
-        nextRegenAt: raw.nextRegenAt != null ? Number(raw.nextRegenAt) : null
-      }
+      return Math.max(0, Math.floor(Number(raw.current)))
     }
     if (raw != null && raw !== '') {
       var legacy = Number(raw)
-      if (!isNaN(legacy)) {
-        return { current: Math.max(0, Math.floor(legacy)), nextRegenAt: null }
-      }
+      if (!isNaN(legacy)) return Math.max(0, Math.floor(legacy))
     }
   } catch (e) {}
-  return defaultState()
+  return MAX_STAMINA
 }
 
-function defaultState() {
-  return { current: MAX_STAMINA, nextRegenAt: null }
-}
-
-function saveRawState(state) {
+function saveRawState() {
+  if (!dirty) return
+  dirty = false
   try {
-    wx.setStorageSync(STORAGE_KEY, {
-      current: state.current,
-      nextRegenAt: state.nextRegenAt
-    })
+    wx.setStorageSync(STORAGE_KEY, { current: cached.current })
   } catch (e) {}
 }
 
-/** 按时间推进自然恢复，返回是否有变化 */
-function syncRegen() {
-  var state = loadRawState()
-  var now = Date.now()
-  var changed = false
-  while (state.current < MAX_STAMINA && state.nextRegenAt && now >= state.nextRegenAt) {
-    state.current += 1
-    changed = true
-    if (state.current < MAX_STAMINA) {
-      state.nextRegenAt += REGEN_INTERVAL_MS
-    } else {
-      state.nextRegenAt = null
-    }
+function resetCountdown() {
+  localRegenRemainingMs = 0
+  localRegenAnchorAt = 0
+}
+
+function initCountdown(remainingMs) {
+  if (cached.current >= cached.maxStamina) {
+    resetCountdown()
+    return
   }
-  if (changed) saveRawState(state)
-  return changed
+  localRegenRemainingMs = remainingMs > 0 ? remainingMs : REGEN_INTERVAL_MS
+  localRegenAnchorAt = Date.now()
+}
+
+function markDirty() {
+  dirty = true
+}
+
+function loadFromStorage() {
+  cached.current = loadSavedCurrent()
+  cached.maxStamina = MAX_STAMINA
+  return Promise.resolve(cached)
+}
+
+/** 冷启动：恢复体力，倒计时从零开始 */
+function bootstrapFromStorage() {
+  cached.current = loadSavedCurrent()
+  cached.maxStamina = MAX_STAMINA
+  resetCountdown()
+}
+
+function fetchStamina() {
+  return loadFromStorage()
+}
+
+function syncRegen() {
+  return loadFromStorage().then(function () { return true })
+}
+
+/**
+ * 前台每帧：本地倒计时推进自然恢复（关小程序不计时，且不写入存储）。
+ */
+function tickOnline(dt) {
+  if (cached.current >= cached.maxStamina) return
+
+  var d = Math.max(0, Math.min(dt || 0, 200))
+  if (d <= 0) return
+
+  if (localRegenAnchorAt <= 0 && localRegenRemainingMs <= 0) {
+    initCountdown(REGEN_INTERVAL_MS)
+  }
+
+  if (getRegenRemainingMs() > 0) return
+
+  cached.current += 1
+  markDirty()
+  if (cached.current < cached.maxStamina) {
+    initCountdown(REGEN_INTERVAL_MS)
+  } else {
+    resetCountdown()
+  }
+  saveRawState()
 }
 
 function getCurrent() {
-  syncRegen()
-  return loadRawState().current
+  return cached.current
 }
 
 function getMax() {
@@ -71,12 +115,14 @@ function canPlay() {
   return getCurrent() > 0
 }
 
-/** 距离下一点体力恢复的剩余毫秒；已满则 0 */
 function getRegenRemainingMs() {
-  syncRegen()
-  var state = loadRawState()
-  if (state.current >= MAX_STAMINA || !state.nextRegenAt) return 0
-  return Math.max(0, state.nextRegenAt - Date.now())
+  if (cached.current >= cached.maxStamina) return 0
+  if (localRegenAnchorAt <= 0) return localRegenRemainingMs || REGEN_INTERVAL_MS
+  return Math.max(0, localRegenRemainingMs - (Date.now() - localRegenAnchorAt))
+}
+
+function shouldShowRegenCountdown() {
+  return cached.current < cached.maxStamina && localRegenAnchorAt > 0
 }
 
 function formatRegenCountdown(ms) {
@@ -84,74 +130,71 @@ function formatRegenCountdown(ms) {
   var totalSec = Math.ceil(ms / 1000)
   var min = Math.floor(totalSec / 60)
   var sec = totalSec % 60
+  var secStr = sec < 10 ? '0' + sec : String(sec)
   if (min >= 60) {
     var hour = Math.floor(min / 60)
     min = min % 60
-    return hour + '小时' + (min > 0 ? min + '分' : '') + '后恢复'
+    var minStr = min < 10 ? '0' + min : String(min)
+    return hour + ':' + minStr + ':' + secStr + '后恢复'
   }
-  if (min > 0) return min + '分' + (sec > 0 ? sec + '秒' : '') + '后恢复'
-  return sec + '秒后恢复'
+  return min + ':' + secStr + '后恢复'
 }
 
 function consume(amount) {
-  syncRegen()
   amount = amount == null ? 1 : Math.max(1, Math.floor(amount))
-  var state = loadRawState()
-  if (state.current < amount) return false
-  state.current -= amount
-  if (state.current < MAX_STAMINA && !state.nextRegenAt) {
-    state.nextRegenAt = Date.now() + REGEN_INTERVAL_MS
-  }
-  saveRawState(state)
-  return true
-}
+  if (cached.current < amount) return Promise.resolve(false)
 
-function grant(amount) {
-  syncRegen()
-  amount = amount == null ? 1 : Math.max(1, Math.floor(amount))
-  var state = loadRawState()
-  if (state.current >= MAX_STAMINA) return state.current
-  state.current = Math.min(MAX_STAMINA, state.current + amount)
-  if (state.current >= MAX_STAMINA) {
-    state.nextRegenAt = null
-  } else if (!state.nextRegenAt) {
-    state.nextRegenAt = Date.now() + REGEN_INTERVAL_MS
+  cached.current -= amount
+  if (cached.current < cached.maxStamina) {
+    initCountdown(REGEN_INTERVAL_MS)
   }
-  saveRawState(state)
-  return state.current
+
+  markDirty()
+  saveRawState()
+  return Promise.resolve(true)
 }
 
 /** 观看激励视频奖励，可超过自然恢复上限 */
 function grantAdReward(amount) {
-  syncRegen()
   amount = amount == null ? AD_GRANT : Math.max(1, Math.floor(amount))
-  var state = loadRawState()
-  state.current += amount
-  if (state.current >= MAX_STAMINA) {
-    state.nextRegenAt = null
-  } else if (!state.nextRegenAt) {
-    state.nextRegenAt = Date.now() + REGEN_INTERVAL_MS
+  cached.current += amount
+  if (cached.current >= cached.maxStamina) {
+    resetCountdown()
+  } else if (localRegenAnchorAt <= 0) {
+    initCountdown(REGEN_INTERVAL_MS)
   }
-  saveRawState(state)
-  return state.current
+  markDirty()
+  saveRawState()
+  return Promise.resolve(cached.current)
 }
 
 function isFull() {
-  return getCurrent() >= MAX_STAMINA
+  return getCurrent() >= getMax()
+}
+
+function persist() {
+  markDirty()
+  saveRawState()
 }
 
 module.exports = {
   MAX_STAMINA: MAX_STAMINA,
   AD_GRANT: AD_GRANT,
   REGEN_INTERVAL_MS: REGEN_INTERVAL_MS,
+  loadFromStorage: loadFromStorage,
+  fetchStamina: fetchStamina,
   syncRegen: syncRegen,
+  tickOnline: tickOnline,
+  persist: persist,
   getCurrent: getCurrent,
   getMax: getMax,
   canPlay: canPlay,
   isFull: isFull,
   getRegenRemainingMs: getRegenRemainingMs,
+  shouldShowRegenCountdown: shouldShowRegenCountdown,
   formatRegenCountdown: formatRegenCountdown,
   consume: consume,
-  grant: grant,
   grantAdReward: grantAdReward
 }
+
+bootstrapFromStorage()

@@ -22,14 +22,24 @@ var PLUS_X_RATIO = (SRC_W - SRC_H) / SRC_W
 var PLUS_W_RATIO = SRC_H / SRC_W
 var TEXT_COLOR = '#ffffff'
 var TEXT_STROKE = '#5b3f8f'
+var COUNTDOWN_GAP_RPX = 6
+var COUNTDOWN_FONT_RPX = 24
+var COUNTDOWN_COLOR = '#6b4fa8'
 
 function preload() {
   assets.load(BAR_BG)
 }
 
+function countdownBlockHeight() {
+  if (!stamina.shouldShowRegenCountdown()) return 0
+  return rpx.rpx(COUNTDOWN_GAP_RPX + COUNTDOWN_FONT_RPX)
+}
+
 function barRect(navY, navH, heroTopY, screenW) {
   var w = rpx.rpx(BAR_W_RPX)
   var h = rpx.rpx(BAR_H_RPX)
+  var extraH = countdownBlockHeight()
+  var totalH = h + extraH
   var x = screenW - rpx.rpx(BAR_RIGHT_RPX) - w
   var settingsY = navY + (navH - rpx.rpx(SETTINGS_SIZE_RPX)) / 2
   var slotTop = settingsY + rpx.rpx(SETTINGS_SIZE_RPX) + rpx.rpx(GAP_BELOW_SETTINGS_RPX)
@@ -37,10 +47,10 @@ function barRect(navY, navH, heroTopY, screenW) {
   if (heroTopY != null && heroTopY > 0) {
     var slotBottom = heroTopY - rpx.rpx(GAP_ABOVE_HERO_RPX)
     var slotH = slotBottom - slotTop
-    if (slotH >= h) {
-      y = slotTop + (slotH - h) / 2
+    if (slotH >= totalH) {
+      y = slotTop + (slotH - totalH) / 2
     } else {
-      y = Math.max(slotTop, slotBottom - h)
+      y = Math.max(slotTop, slotBottom - totalH)
     }
   }
   return { x: x, y: y, w: w, h: h, cx: x + w / 2, cy: y + h / 2 }
@@ -92,6 +102,14 @@ function drawBar(ctx, navY, navH, heroTopY, screenW) {
   ctx.strokeText(text, bar.cx, bar.cy)
   ctx.fillStyle = TEXT_COLOR
   ctx.fillText(text, bar.cx, bar.cy)
+
+  if (stamina.shouldShowRegenCountdown()) {
+    var countdown = stamina.formatRegenCountdown(stamina.getRegenRemainingMs())
+    var countdownSize = rpx.rpx(COUNTDOWN_FONT_RPX)
+    var countdownFont = '700 ' + countdownSize.toFixed(0) + 'px sans-serif'
+    var countdownY = bar.y + bar.h + rpx.rpx(COUNTDOWN_GAP_RPX) + countdownSize * 0.55
+    draw.fillTextCentered(ctx, countdown, bar.cx, countdownY, countdownFont, COUNTDOWN_COLOR)
+  }
 
   return bar
 }

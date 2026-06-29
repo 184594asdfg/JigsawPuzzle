@@ -99,7 +99,7 @@ function clearEnter(screen) {
 
 function watchAdRecover(onDone) {
   if (_granting) return
-  stamina.syncRegen()
+  stamina.loadFromStorage()
   _granting = true
   try { wx.showLoading({ title: '广告加载中', mask: true }) } catch (e) {}
   rewardedAd.init()
@@ -108,9 +108,10 @@ function watchAdRecover(onDone) {
       try { wx.showToast({ title: '需完整观看广告才能恢复体力', icon: 'none' }) } catch (e2) {}
       return
     }
-    stamina.grantAdReward(AD_REWARD)
-    try { wx.showToast({ title: '体力+' + AD_REWARD, icon: 'success' }) } catch (e3) {}
-    if (onDone) onDone()
+    stamina.grantAdReward(AD_REWARD).then(function () {
+      try { wx.showToast({ title: '体力+' + AD_REWARD, icon: 'success' }) } catch (e3) {}
+      if (onDone) onDone()
+    })
   }).catch(function (err) {
     try {
       wx.showToast({ title: (err && err.message) || '广告加载失败', icon: 'none' })

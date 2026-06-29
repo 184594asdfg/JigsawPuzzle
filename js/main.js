@@ -110,7 +110,6 @@ function bootstrapData() {
   settingsModal.preload()
 
   return remoteSync.syncOnEnter().then(function () {
-    stamina.syncRegen()
     splash.hint = '正在同步进度...'
     splash.progress = Math.max(splash.progress, 0.78)
     splash.hint = '正在加载界面资源...'
@@ -170,7 +169,6 @@ wx.onTouchCancel(function (e) { if (canInteract()) screenManager.onTouchCancel(e
 
 wx.onShow(function () {
   if (!canInteract()) return
-  stamina.syncRegen()
   bgm.sync()
   remoteSync.syncOnEnter().then(function () {
     return subpackUi.preloadAll().catch(function () {})
@@ -178,7 +176,10 @@ wx.onShow(function () {
     prefetch.prefetchHomeAssets()
   }).catch(function () {})
 })
-wx.onHide(function () { bgm.pause() })
+wx.onHide(function () {
+  bgm.pause()
+  stamina.persist()
+})
 
 var lastTs = 0
 function loop(ts) {
@@ -191,6 +192,7 @@ function loop(ts) {
     loadingScreen.update(splash, dt)
     loadingScreen.render(ctx, splash, 1)
   } else {
+    stamina.tickOnline(dt)
     screenManager.render(dt)
   }
 

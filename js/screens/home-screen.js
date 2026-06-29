@@ -208,7 +208,7 @@ HomeScreen.prototype._isInputLocked = function () {
 
 HomeScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
-  stamina.syncRegen()
+  stamina.loadFromStorage()
   settingsModal.preload()
   gameClub.preload()
   staminaBar.preload()
@@ -224,7 +224,7 @@ HomeScreen.prototype.onResume = function () {
   this.showRank = false
   this.showSettings = false
   this.showStaminaModal = false
-  stamina.syncRegen()
+  stamina.loadFromStorage()
   remoteSync.syncOnEnter().then(function () {
     prefetch.prefetchHomeAssets()
   })
@@ -284,10 +284,6 @@ HomeScreen.prototype.update = function (dt) {
   if (this.showRank) rankModal.tickEnter(this, dt)
   if (this.showStaminaModal) staminaModal.tickEnter(this, dt)
   heroSliceSnap.tick(this)
-  if (!this._staminaSyncAt || Date.now() - this._staminaSyncAt > 1000) {
-    this._staminaSyncAt = Date.now()
-    stamina.syncRegen()
-  }
   var tick = pressAnim.tickPressAnim(this._pressAnim, dt)
   this._pressAnim = tick.anim
   if (!tick.completed) return
@@ -712,12 +708,12 @@ HomeScreen.prototype._drawStaminaModal = function (ctx, W, H) {
 }
 HomeScreen.prototype._startPuzzle = function () {
   var self = this
-  stamina.syncRegen()
-  if (!stamina.canPlay()) {
-    this._openStaminaModal()
-    return
-  }
-  function openLevel(next) {
+  stamina.loadFromStorage().then(function () {
+    if (!stamina.canPlay()) {
+      self._openStaminaModal()
+      return
+    }
+    function openLevel(next) {
     if (!next || !next.level || !next.level.key || !next.theme) {
       try {
         wx.showToast({ title: '暂无关卡数据', icon: 'none' })
@@ -752,6 +748,7 @@ HomeScreen.prototype._startPuzzle = function () {
     return
   }
   tryOpen()
+  })
 }
 
 /**
