@@ -46,8 +46,18 @@ BaseScreen.prototype.addHitZone = function (rect, handler, opts) {
 BaseScreen.prototype.hitZoneAt = function (x, y) {
   for (var i = this._hitZones.length - 1; i >= 0; i--) {
     var z = this._hitZones[i]
-    if (x >= z.rect.x && x <= z.rect.x + z.rect.w &&
-      y >= z.rect.y && y <= z.rect.y + z.rect.h) {
+    var r = z.rect
+    if (z.opts && z.opts.shape === 'circle') {
+      var cx = r.x + r.w / 2
+      var cy = r.y + r.h / 2
+      var radius = Math.min(r.w, r.h) / 2
+      var dx = x - cx
+      var dy = y - cy
+      if (dx * dx + dy * dy <= radius * radius) return z
+      continue
+    }
+    if (x >= r.x && x <= r.x + r.w &&
+      y >= r.y && y <= r.y + r.h) {
       return z
     }
   }

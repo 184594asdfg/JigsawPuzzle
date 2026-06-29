@@ -5,6 +5,7 @@ var assets = require('../js/assets')
 var galleryData = require('./gallery-data')
 var progress = require('./progress')
 var subpackUi = require('./subpack-ui')
+var stamina = require('./stamina')
 
 var prefetchToken = 0
 var lastPrefetchKeys = ''
@@ -147,6 +148,17 @@ function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
     try { wx.showToast({ title: '关卡图片地址缺失', icon: 'none' }) } catch (e) {}
     return
   }
+  stamina.syncRegen()
+  if (!stamina.canPlay()) {
+    try {
+      wx.showToast({
+        title: '体力不足',
+        icon: 'none',
+        duration: 2000
+      })
+    } catch (e) {}
+    return
+  }
   var delay = minDelayMs > 0 ? minDelayMs : 0
   var loadP = prefetchLevelImage(resolved.image)
   var waitP = delay > 0
@@ -154,6 +166,10 @@ function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
     : Promise.resolve()
   var uiP = subpackUi.preloadAll().catch(function () {})
   Promise.all([loadP, waitP, uiP]).then(function () {
+    if (!stamina.consume(1)) {
+      try { wx.showToast({ title: '体力不足', icon: 'none' }) } catch (e) {}
+      return
+    }
     var PuzzleScreen = require('../js/screens/puzzle-screen')
     manager.push(new PuzzleScreen({
       image: resolved.image,

@@ -17,6 +17,9 @@ var jigsawShape = require('../jigsaw-shape')
 var heroSliceSnap = require('../hero-slice-snap')
 var shareNav = require('../share')
 var gameClub = require('../game-club')
+var staminaBar = require('../stamina-bar')
+var staminaModal = require('../stamina-modal')
+var stamina = require('../../utils/stamina')
 var rankModal = require('../../utils/rank-modal')
 var user = require('../../utils/user')
 
@@ -187,6 +190,7 @@ function HomeScreen() {
   BaseScreen.call(this)
   this.showRank = false
   this.showSettings = false
+  this.showStaminaModal = false
   this.rankScrollY = 0
   this._rankDrag = null
   this._sideButtonRects = {}
@@ -204,8 +208,11 @@ HomeScreen.prototype._isInputLocked = function () {
 
 HomeScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
+  stamina.syncRegen()
   settingsModal.preload()
   gameClub.preload()
+  staminaBar.preload()
+  staminaModal.preload()
   remoteSync.syncOnEnter().then(function () {
     prefetch.prefetchHomeAssets()
   }).catch(function () {
@@ -216,6 +223,8 @@ HomeScreen.prototype.onEnter = function (manager) {
 HomeScreen.prototype.onResume = function () {
   this.showRank = false
   this.showSettings = false
+  this.showStaminaModal = false
+  stamina.syncRegen()
   remoteSync.syncOnEnter().then(function () {
     prefetch.prefetchHomeAssets()
   })
@@ -273,7 +282,12 @@ HomeScreen.prototype._tryStartSliceSnap = function (layout) {
 HomeScreen.prototype.update = function (dt) {
   if (this.showSettings) settingsModal.tickSettingsEnter(this, dt)
   if (this.showRank) rankModal.tickEnter(this, dt)
+  if (this.showStaminaModal) staminaModal.tickEnter(this, dt)
   heroSliceSnap.tick(this)
+  if (!this._staminaSyncAt || Date.now() - this._staminaSyncAt > 1000) {
+    this._staminaSyncAt = Date.now()
+    stamina.syncRegen()
+  }
   var tick = pressAnim.tickPressAnim(this._pressAnim, dt)
   this._pressAnim = tick.anim
   if (!tick.completed) return
@@ -366,7 +380,9 @@ HomeScreen.prototype.render = function (ctx) {
     shareNav.drawNavIcon(ctx, navY, navH, pressAnim.btnScale(anim, 'share'))
   }
 
-  var blockNavHits = !!anim || this.showRank || this.showSettings ||
+  staminaBar.drawBar(ctx, navY, navH, heroTopY, W)
+
+  var blockNavHits = !!anim || this.showRank || this.showSettings || this.showStaminaModal ||
     heroSliceSnap.isAnimating(this) || this._isInputLocked()
   if (!blockNavHits) {
     this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () {
@@ -382,11 +398,23 @@ HomeScreen.prototype.render = function (ctx) {
         self._startPressAnim('share')
       })
     }
+    var staminaRect = staminaBar.barRect(navY, navH, heroTopY, W)
+    this.addHitZone(staminaBar.bodyHitRect(staminaRect, true), function () {
+      self._openStaminaModal()
+    })
+    this.addHitZone(staminaBar.plusHitRect(staminaRect, true), function () {
+      self._openStaminaModal()
+    })
   }
 
-  // 排行榜弹窗 — 最上层绘制，遮罩盖住设置/游戏圈等导航图标
+  // 排行榜弹窗
   if (this.showRank) {
     this._drawRankModal(ctx, W, H)
+  }
+
+  // 体力弹窗 — 最上层
+  if (this.showStaminaModal) {
+    this._drawStaminaModal(ctx, W, H)
   }
 }
 
@@ -474,7 +502,7 @@ HomeScreen.prototype._drawBottomBar = function (ctx, layout) {
   var gallery = layout.bottomBar.galleryBtn
   var self = this
   var anim = this._pressAnim
-  var blockHits = !!anim || this.showRank || this.showSettings ||
+  var blockHits = !!anim || this.showRank || this.showSettings || this.showStaminaModal ||
     heroSliceSnap.isAnimating(this) || this._isInputLocked()
 
   if (SHOW_RANK_BTN) {
@@ -552,7 +580,7 @@ HomeScreen.prototype.onTouchStart = function (e) {
   var t = this._firstTouch(e)
   if (!t) return
 
-  if (!this.showRank && !this.showSettings) {
+  if (!this.showRank && !this.showSettings && !this.showStaminaModal) {
     var navY = rpx.safeTop()
     var navH = rpx.rpx(88)
     if (settingsModal.isNavHit(navY, navH, t.x, t.y)) {
@@ -620,10 +648,10 @@ HomeScreen.prototype.onTouchCancel = function () {
 HomeScreen.prototype._startPressAnim = function (id) {
   if (this._pressAnim) return
   if (id === 'settings' && this.showSettings) return
-  if (id === 'share' && (this.showRank || this.showSettings)) return
-  if (id === 'gameClub' && (this.showRank || this.showSettings)) return
+  if (id === 'share' && (this.showRank || this.showSettings || this.showStaminaModal)) return
+  if (id === 'gameClub' && (this.showRank || this.showSettings || this.showStaminaModal)) return
   if (id !== 'settings' && id !== 'share' && id !== 'gameClub' &&
-    (this.showRank || this.showSettings)) return
+    (this.showRank || this.showSettings || this.showStaminaModal)) return
   sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
 }
@@ -666,8 +694,29 @@ HomeScreen.prototype._openGallery = function () {
   var GalleryScreen = require('./gallery-screen')
   this.manager.push(new GalleryScreen())
 }
+HomeScreen.prototype._openStaminaModal = function () {
+  sfx.playClick()
+  this.showRank = false
+  this.showStaminaModal = true
+  staminaModal.beginEnter(this)
+}
+HomeScreen.prototype._closeStaminaModal = function () {
+  this.showStaminaModal = false
+  staminaModal.clearEnter(this)
+}
+HomeScreen.prototype._drawStaminaModal = function (ctx, W, H) {
+  var self = this
+  staminaModal.drawModal(this, ctx, W, H, {
+    onClose: function () { self._closeStaminaModal() }
+  })
+}
 HomeScreen.prototype._startPuzzle = function () {
   var self = this
+  stamina.syncRegen()
+  if (!stamina.canPlay()) {
+    this._openStaminaModal()
+    return
+  }
   function openLevel(next) {
     if (!next || !next.level || !next.level.key || !next.theme) {
       try {

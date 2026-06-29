@@ -14,6 +14,7 @@ var share = require('./share')
 var gameClub = require('./game-club')
 var subpackUi = require('../utils/subpack-ui')
 var user = require('../utils/user')
+var stamina = require('../utils/stamina')
 require('../utils/rank-modal')
 
 var canvas = wx.createCanvas()
@@ -49,6 +50,9 @@ var CORE_ASSETS = [
   'images/icons/rank.png',
   'images/icons/setting.png',
   'images/icons/game-club.png',
+  'images/icons/stamina_bar_bg.png',
+  'images/icons/stamina_modal.png',
+  'images/icons/btn_stamina_recover.png',
   'images/themes/theme-unlocked.png',
   'images/themes/theme-locked.png',
   'images/themes/level-placeholder.png',
@@ -106,6 +110,7 @@ function bootstrapData() {
   settingsModal.preload()
 
   return remoteSync.syncOnEnter().then(function () {
+    stamina.syncRegen()
     splash.hint = '正在同步进度...'
     splash.progress = Math.max(splash.progress, 0.78)
     splash.hint = '正在加载界面资源...'
@@ -165,6 +170,7 @@ wx.onTouchCancel(function (e) { if (canInteract()) screenManager.onTouchCancel(e
 
 wx.onShow(function () {
   if (!canInteract()) return
+  stamina.syncRegen()
   bgm.sync()
   remoteSync.syncOnEnter().then(function () {
     return subpackUi.preloadAll().catch(function () {})

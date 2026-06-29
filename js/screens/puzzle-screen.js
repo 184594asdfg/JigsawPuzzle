@@ -89,7 +89,9 @@ function PuzzleScreen(opts) {
   if (!this.gridSize || isNaN(this.gridSize)) this.gridSize = 4
   this.levelKey = opts.levelKey || ''
   this.levelLabel = opts.levelLabel || '拼图'
-  this.timeLimitSec = opts.timeLimit > 0 ? Number(opts.timeLimit) : 0
+  this.timeLimitSec = opts.timeLimit != null && opts.timeLimit !== ''
+    ? Number(opts.timeLimit)
+    : 0
   this.engine = null
   this.loading = true
   this.showSuccess = false

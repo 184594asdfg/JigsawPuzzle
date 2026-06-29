@@ -62,5 +62,9 @@ module.exports = {
    */
   toolsApiEnabled: true,
   /** 拼图页道具 / 时间耗尽加时 — 激励视频 */
-  rewardedAdUnitId: 'adunit-2c82047fdf284c77'
+  rewardedAdUnitId: 'adunit-2c82047fdf284c77',
+  /** 体力上限与自然恢复间隔（分钟）；看广告单次奖励 */
+  staminaMax: 5,
+  staminaRegenMin: 30,
+  staminaAdGrant: 15
 }

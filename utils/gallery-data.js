@@ -116,7 +116,9 @@ function resolveLevelForPlay(themeId, levelKey, levelNum, partial) {
     name: (lv && lv.name) ? lv.name : ('关卡 ' + num),
     image: resolveLevelImage(theme, num, lv),
     grid: config.resolveGridSize(lv && lv.grid),
-    timeLimit: (lv && lv.timeLimit) ? lv.timeLimit : 0
+    timeLimit: lv
+      ? (lv.timeLimit != null ? lv.timeLimit : (lv.timeLimitSec != null ? lv.timeLimitSec : 0))
+      : 0
   }
 }
 
