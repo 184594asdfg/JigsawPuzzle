@@ -1,5 +1,5 @@
 /**
- * 关卡进度：completed_count（线性）+ 服务端同步
+ * 关卡进度：completed_count（当前有效链，推关用）+ removed_completed_count（已删主题，展示用）
  */
 var jigsawApi = require('./jigsaw-api')
 var user = require('./user')
@@ -9,6 +9,7 @@ var galleryData = require('./gallery-data')
 var STORAGE_PROGRESS = 'puzzle_progress_v2'
 var LEGACY_STORAGE = 'puzzle_level_progress'
 var completedCount = 0
+var removedCompletedCount = 0
 var lastCompletedAt = null
 var totalLevels = 0
 var synced = false
@@ -33,8 +34,13 @@ function readLocal() {
 function writeLocal() {
   wx.setStorageSync(STORAGE_PROGRESS, {
     completedCount: completedCount,
+    removedCompletedCount: removedCompletedCount,
     lastCompletedAt: lastCompletedAt
   })
+}
+
+function getDisplayCompletedCount() {
+  return completedCount + removedCompletedCount
 }
 
 function applyServerData(data, opts) {
@@ -44,12 +50,15 @@ function applyServerData(data, opts) {
   var serverCount = Math.max(0, (data && data.completedCount) || 0)
   if (authoritative) {
     completedCount = serverCount
+    removedCompletedCount = Math.max(0, (data && data.removedCompletedCount) || 0)
   } else {
     completedCount = Math.max(completedCount, serverCount)
+    var serverRemoved = Math.max(0, (data && data.removedCompletedCount) || 0)
+    removedCompletedCount = Math.max(removedCompletedCount, serverRemoved)
   }
   if (data && data.lastCompletedAt) {
     lastCompletedAt = data.lastCompletedAt
-  } else if (serverCount === 0 && completedCount === 0) {
+  } else if (serverCount === 0 && removedCompletedCount === 0 && completedCount === 0) {
     lastCompletedAt = null
   }
   if (data && data.totalLevels > 0) totalLevels = data.totalLevels
@@ -79,12 +88,12 @@ function willAdvanceOnComplete(levelKey) {
   return globalIndex > 0 && globalIndex === completedCount + 1
 }
 
-/** 首页主按钮文案：全通后显示「再玩」 */
+/** 首页主按钮文案：显示 display（当前+已删）之和；全通后显示「再玩」 */
 function getMainLevelLabel(themes) {
   ensureLoaded()
   var total = computeTotalFromThemes(themes || galleryData.getThemes())
   if (total > 0 && completedCount >= total) return '再玩'
-  return String(completedCount + 1)
+  return String(getDisplayCompletedCount() + 1)
 }
 
 function isAllLevelsComplete(themes) {
@@ -97,6 +106,7 @@ function ensureLoaded() {
   var local = readLocal()
   if (local) {
     completedCount = Math.max(0, local.completedCount || 0)
+    removedCompletedCount = Math.max(0, local.removedCompletedCount || 0)
     lastCompletedAt = local.lastCompletedAt || null
   }
 }
@@ -162,7 +172,6 @@ function markLevelComplete(levelKey) {
     } catch (e) {}
   }).catch(function (err) {
     console.warn('[progress] save to server failed', err)
-    // 保留本地乐观更新，避免通关后仍显示关卡 1
   })
 }
 
@@ -173,7 +182,14 @@ function isLevelComplete(levelKey) {
   return globalIndex > 0 && globalIndex <= completedCount
 }
 
+/** 展示/分享/排行：当前 + 已删除 */
 function getCompletedCount() {
+  ensureLoaded()
+  return getDisplayCompletedCount()
+}
+
+/** 推关/下一关：仅当前有效链 */
+function getCurrentCompletedCount() {
   ensureLoaded()
   return completedCount
 }
@@ -225,7 +241,7 @@ function countThemeCompleted(theme) {
 
 function countAllCompleted(themes) {
   ensureLoaded()
-  return completedCount
+  return getDisplayCompletedCount()
 }
 
 function getNextLevel(themes) {
@@ -313,6 +329,8 @@ module.exports = {
   getMainLevelLabel: getMainLevelLabel,
   isAllLevelsComplete: isAllLevelsComplete,
   getCompletedCount: getCompletedCount,
+  getCurrentCompletedCount: getCurrentCompletedCount,
+  getDisplayCompletedCount: getDisplayCompletedCount,
   countThemeCompleted: countThemeCompleted,
   countAllCompleted: countAllCompleted,
   getNextLevel: getNextLevel,

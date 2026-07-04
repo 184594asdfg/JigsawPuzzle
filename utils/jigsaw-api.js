@@ -23,14 +23,22 @@ function normalizeProgress(data) {
   if (!data) {
     return {
       completedCount: 0,
+      removedCompletedCount: 0,
+      displayCompletedCount: 0,
       lastCompletedAt: null,
       nextLevelNum: 1,
       totalLevels: 0
     }
   }
   var count = data.completedCount != null ? data.completedCount : 0
+  var removed = data.removedCompletedCount != null ? data.removedCompletedCount : 0
+  var display = data.displayCompletedCount != null
+    ? data.displayCompletedCount
+    : count + removed
   return {
     completedCount: count,
+    removedCompletedCount: removed,
+    displayCompletedCount: display,
     lastCompletedAt: data.lastCompletedAt || null,
     nextLevelNum: data.nextLevelNum != null ? data.nextLevelNum : count + 1,
     totalLevels: data.totalLevels || 0,

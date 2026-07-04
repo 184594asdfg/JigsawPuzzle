@@ -169,6 +169,7 @@ wx.onTouchCancel(function (e) { if (canInteract()) screenManager.onTouchCancel(e
 
 wx.onShow(function () {
   if (!canInteract()) return
+  stamina.loadFromStorage()
   bgm.sync()
   remoteSync.syncOnEnter().then(function () {
     return subpackUi.preloadAll().catch(function () {})
@@ -192,7 +193,7 @@ function loop(ts) {
     loadingScreen.update(splash, dt)
     loadingScreen.render(ctx, splash, 1)
   } else {
-    stamina.tickOnline(dt)
+    stamina.tickOnline()
     screenManager.render(dt)
   }
 
