@@ -8,6 +8,7 @@ var draw = require('../draw')
 var settingsModal = require('../settings-modal')
 var rankData = require('../../utils/rank-data')
 var galleryData = require('../../utils/gallery-data')
+var imageProxy = require('../../utils/image-proxy')
 var progress = require('../../utils/progress')
 var remoteSync = require('../../utils/remote-sync')
 var prefetch = require('../../utils/prefetch')
@@ -246,8 +247,7 @@ HomeScreen.prototype._resolveHeroTheme = function () {
 
 HomeScreen.prototype._getThemeCoverUrl = function (theme) {
   if (!theme) return ''
-  if (theme.imageFolder) return galleryData.buildThemeCoverUrl(theme.imageFolder)
-  return theme.themeImage || ''
+  return imageProxy.resolveThemeCoverUrl(theme)
 }
 
 HomeScreen.prototype._tryStartSliceSnap = function (layout) {
@@ -724,7 +724,10 @@ HomeScreen.prototype._startPuzzle = function () {
       next.theme.id, next.level.key, next.level.level, next.level
     )
     if (!resolved.image) {
-      try { wx.showToast({ title: '关卡图片地址缺失', icon: 'none' }) } catch (e) {}
+      resolved.image = imageProxy.buildLevelImageUrl(resolved.key)
+    }
+    if (!resolved.image) {
+      try { wx.showToast({ title: '请先登录以加载关卡图', icon: 'none' }) } catch (e) {}
       return
     }
     prefetch.enterPuzzleWhenReady(self.manager, resolved, 0)

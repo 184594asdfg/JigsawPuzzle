@@ -70,21 +70,21 @@ python3 tools/compress_pack_images.py
 
 ---
 
-## CDN 关卡图
+## CDN 关卡图（服务端内部拉取，客户端走 API 代理）
 
 | 文件 | 路径 |
 |------|------|
-| 封面 | `{cdnPrefix}{image_folder}/cover.jpg` |
-| 关卡 | `{cdnPrefix}{image_folder}/01.jpg` … `25.jpg` |
+| 封面 | `https://cdn2.pastecuts.cn/pyGame/{chapterId}.jpg` |
+| 关卡 | `https://cdn2.pastecuts.cn/pyGame/{levelId}.jpg`（如 `10003.jpg`） |
 
-- 客户端：`utils/app-config.js` → `cdnPrefix`
-- 后端：`.env` → `JIGSAW_CDN_PREFIX`（须一致，末尾 `/`）
+- 后端：`.env` → `JIGSAW_CDN_PREFIX=https://cdn2.pastecuts.cn/pyGame/`
+- 客户端：`wx.downloadFile` 只请求 `vapi.pastecuts.cn` 代理接口
 - 出图：**750×1125**（2:3）
 
 ## 图集缩略
 
-列表用 `imageView2` webp（`gallery-data.appendGalleryThumbParams`）；拼图页用原图。
+代理接口加 `thumb=1`，服务端转发 CDN 时附带 `imageView2` 参数；拼图页用原图。
 
 ## 微信
 
-CDN 域名加入小游戏 **downloadFile 合法域名**。
+`downloadFile` 合法域名：**`vapi.pastecuts.cn`**（关卡图经 API 代理，可不配 CDN 域名）。

@@ -119,7 +119,7 @@ GalleryScreen.prototype._buildCurrentTheme = function (themeId) {
     var key = l ? l.key : galleryData.buildLevelKey(t.id, n)
     var done = progress.isLevelComplete(key)
     var image = done ? galleryData.resolveLevelImage(t, n, l) : ''
-    var thumbImage = image ? galleryData.appendGalleryThumbParams(image) : ''
+    var thumbImage = done ? galleryData.resolveLevelThumbImage(t, n, l) : ''
     levels.push({
       key: key,
       themeId: t.id,

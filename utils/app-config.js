@@ -24,7 +24,8 @@ var API = {
 var env = getEnv()
 var baseURL = API[env] || API.production
 
-var cdnPrefix = 'https://cdn2.pastecuts.cn/jigsaw/'
+/** 仅作备注；关卡图已走 API 代理，不再直连 CDN */
+var cdnPrefix = 'https://cdn2.pastecuts.cn/pyGame/'
 
 /** 开发覆盖：非空时所有关卡用该图；正式环境留空，走接口 CDN */
 var allLevelsPreviewImage = ''
@@ -54,7 +55,11 @@ module.exports = {
     progress: '/jigsaw/progress',
     rank: '/jigsaw/rank',
     profile: '/user/wxProfile',
-    tools: '/jigsaw/tools'
+    tools: '/jigsaw/tools',
+    jigsawImage: '/jigsaw/image',
+    jigsawCover: '/jigsaw/cover',
+    jigsawPlay: '/jigsaw/play',
+    jigsawImageUrls: '/jigsaw/image-urls'
   },
   /**
    * 道具次数是否与后端同步（GET /tools、POST grant、POST consume）。

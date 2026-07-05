@@ -3,6 +3,7 @@
  */
 var jigsawApi = require('./jigsaw-api')
 var config = require('./app-config')
+var imageProxy = require('./image-proxy')
 
 var DEFAULT_GRID = config.defaultGrid || 4
 var LEVELS_PER_THEME = 25
@@ -22,76 +23,21 @@ var loadError = null
 var loadingPromise = null
 var themeLevelsLoading = {}
 
-function isAbsoluteUrl(url) {
-  return url.indexOf('http://') === 0 || url.indexOf('https://') === 0
-}
-
-function stripLocalhostPath(url) {
-  return String(url).replace(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/?/i, '')
-}
-
-/** 将接口相对路径或目录片段拼成完整 CDN URL */
-function ensureCdnUrl(urlOrPath) {
-  if (!urlOrPath) return ''
-  var s = String(urlOrPath).trim()
-  if (!s) return ''
-  if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i.test(s)) {
-    s = stripLocalhostPath(s)
-  }
-  if (isAbsoluteUrl(s)) return s
-  var prefix = config.cdnPrefix || ''
-  if (!prefix) return s
-  if (prefix.charAt(prefix.length - 1) !== '/') prefix += '/'
-  var path = s.replace(/^\/+/, '')
-  if (path.indexOf('jigsaw/') === 0) path = path.slice('jigsaw/'.length)
-  return prefix + path
-}
-
-function buildThemeCoverUrl(imageFolder) {
-  if (!imageFolder) return ''
-  var prefix = config.cdnPrefix || ''
-  if (!prefix) return ''
-  if (prefix.charAt(prefix.length - 1) !== '/') prefix += '/'
-  var folder = imageFolder.replace(/^\/+/, '').replace(/\/+$/, '')
-  return prefix + folder + '/cover.jpg'
-}
-
 function buildLevelKey(themeId, levelNum) {
   return themeId + '_' + levelNum
-}
-
-function buildLevelImageUrl(imageFolder, levelNum) {
-  if (!imageFolder || !levelNum) return ''
-  var prefix = config.cdnPrefix || ''
-  if (!prefix) return ''
-  if (prefix.charAt(prefix.length - 1) !== '/') prefix += '/'
-  var folder = imageFolder.replace(/^\/+/, '').replace(/\/+$/, '')
-  var num = levelNum < 10 ? '0' + levelNum : String(levelNum)
-  return prefix + folder + '/' + num + '.jpg'
-}
-
-/** CDN 原图 URL 追加缩略图处理参数（仅用于图集列表展示） */
-function appendGalleryThumbParams(url) {
-  if (!url || url.indexOf('http') !== 0) return url
-  if (url.indexOf('imageView2') >= 0) return url
-  return url + '?imageView2/3/w/' + GALLERY_THUMB_W + '/h/' + GALLERY_THUMB_H +
-    '/q/' + GALLERY_THUMB_QUALITY + '/interlace/1/format/webp'
 }
 
 function resolveLevelImage(theme, levelNum, level) {
   if (config.allLevelsPreviewImage) {
     return config.allLevelsPreviewImage
   }
-  if (level && level.image) return ensureCdnUrl(level.image)
-  if (theme && theme.imageFolder && levelNum) {
-    return buildLevelImageUrl(theme.imageFolder, levelNum)
-  }
-  return ''
+  var key = (level && level.key) ? level.key : buildLevelKey(theme && theme.id, levelNum)
+  return imageProxy.buildLevelImageUrl(key)
 }
 
 function resolveLevelThumbImage(theme, levelNum, level) {
-  var full = resolveLevelImage(theme, levelNum, level)
-  return full ? appendGalleryThumbParams(full) : ''
+  var key = (level && level.key) ? level.key : buildLevelKey(theme && theme.id, levelNum)
+  return imageProxy.buildLevelImageUrl(key, { thumb: true })
 }
 
 function resolveLevelForPlay(themeId, levelKey, levelNum, partial) {
@@ -122,18 +68,14 @@ function resolveLevelForPlay(themeId, levelKey, levelNum, partial) {
   }
 }
 
-function normalizeLevel(level, themeId, imageFolder) {
+function normalizeLevel(level, themeId) {
   var levelNum = level.level != null ? level.level : (level.levelNum || 0)
-  var image = ensureCdnUrl(level.image || level.imageUrl || '')
-  if (!image && imageFolder && levelNum) {
-    image = buildLevelImageUrl(imageFolder, levelNum)
-  }
+  var key = level.key || level.levelKey || buildLevelKey(themeId, levelNum)
   return {
-    key: level.key || level.levelKey || '',
+    key: key,
     themeId: level.themeId || themeId || '',
     level: levelNum,
     name: level.name || '',
-    image: image,
     grid: config.resolveGridSize(level.grid != null ? level.grid : level.gridSize),
     timeLimit: level.timeLimit != null ? level.timeLimit : (level.timeLimitSec || 0)
   }
@@ -142,10 +84,9 @@ function normalizeLevel(level, themeId, imageFolder) {
 function normalizeTheme(theme) {
   var id = theme.id || theme.themeId || ''
   var rawLevels = theme.levels || []
-  var imageFolder = theme.imageFolder || ''
   var levels = []
   for (var i = 0; i < rawLevels.length; i++) {
-    levels.push(normalizeLevel(rawLevels[i], id, imageFolder))
+    levels.push(normalizeLevel(rawLevels[i], id))
   }
   var totalLevels = theme.totalLevels != null ? theme.totalLevels : levels.length
   if (!totalLevels && levels.length) totalLevels = levels.length
@@ -154,9 +95,7 @@ function normalizeTheme(theme) {
     name: theme.name || '',
     icon: theme.icon || '',
     accent: theme.accent || '',
-    imageFolder: theme.imageFolder || '',
-    themeImage: ensureCdnUrl(theme.themeImage || theme.theme_image_url || '') ||
-      buildThemeCoverUrl(theme.imageFolder || ''),
+    themeImage: theme.themeImage || '',
     totalLevels: totalLevels,
     levels: levels,
     levelsLoaded: levels.length > 0
@@ -294,14 +233,11 @@ module.exports = {
   getLoadError: getLoadError,
   getThemeById: getThemeById,
   getLevelByKey: getLevelByKey,
-  ensureCdnUrl: ensureCdnUrl,
-  buildThemeCoverUrl: buildThemeCoverUrl,
-  buildLevelImageUrl: buildLevelImageUrl,
   buildLevelKey: buildLevelKey,
-  appendGalleryThumbParams: appendGalleryThumbParams,
   resolveLevelImage: resolveLevelImage,
   resolveLevelThumbImage: resolveLevelThumbImage,
   resolveLevelForPlay: resolveLevelForPlay,
+  prefetchLevelUrls: imageProxy.prefetchLevelUrls,
   GALLERY_THUMB_W: GALLERY_THUMB_W,
   GALLERY_THUMB_H: GALLERY_THUMB_H
 }

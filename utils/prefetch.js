@@ -1,11 +1,13 @@
 /**
- * 资源预取：首页当前主题封面 + 当前关/下一关关卡图
+ * 资源预取：首页当前主题封面 + 当前关/下一关关卡图（走 API 代理）
  */
 var assets = require('../js/assets')
 var galleryData = require('./gallery-data')
 var progress = require('./progress')
 var subpackUi = require('./subpack-ui')
 var stamina = require('./stamina')
+var imageProxy = require('./image-proxy')
+var user = require('./user')
 
 var prefetchToken = 0
 var lastPrefetchKeys = ''
@@ -27,14 +29,12 @@ function resolveLevelImage(level, theme) {
   return galleryData.resolveLevelImage(theme, level.level, level)
 }
 
-/** 首页 hero 内拼图区：当前可玩主题 CDN cover.jpg */
+/** 首页 hero 内拼图区：当前可玩主题封面（代理 URL） */
 function getCurrentThemeCoverUrl() {
   if (!galleryData.isLoaded()) return ''
   var next = progress.getNextLevel(galleryData.getThemes())
   if (!next || !next.theme) return ''
-  var theme = next.theme
-  if (theme.imageFolder) return galleryData.buildThemeCoverUrl(theme.imageFolder)
-  return theme.themeImage || ''
+  return imageProxy.resolveThemeCoverUrl(next.theme)
 }
 
 function prefetchCurrentThemeCover() {
@@ -89,6 +89,7 @@ function collectPrefetchTargets(themes) {
 
 function prefetchNextLevelAssets() {
   if (!galleryData.isLoaded()) return Promise.resolve()
+  if (!user.getUserId()) return Promise.resolve()
   if (prefetchPromise) return prefetchPromise
 
   var token = ++prefetchToken
@@ -96,7 +97,8 @@ function prefetchNextLevelAssets() {
   var targets = collectPrefetchTargets(themes)
   if (!targets.length) return Promise.resolve()
 
-  var keySig = targets.map(function (t) { return t.level.key }).join('|')
+  var levelKeys = targets.map(function (t) { return t.level.key })
+  var keySig = levelKeys.join('|')
   var allCached = true
   for (var c = 0; c < targets.length; c++) {
     var url = resolveLevelImage(targets[c].level, targets[c].theme)
@@ -107,32 +109,13 @@ function prefetchNextLevelAssets() {
   }
   if (keySig === lastPrefetchKeys && allCached) return Promise.resolve()
 
-  function prefetchTargets(items) {
+  prefetchPromise = galleryData.prefetchLevelUrls(levelKeys).then(function () {
     if (token !== prefetchToken) return
-    for (var i = 0; i < items.length; i++) {
-      var url = resolveLevelImage(items[i].level, items[i].theme)
+    for (var i = 0; i < targets.length; i++) {
+      var url = resolveLevelImage(targets[i].level, targets[i].theme)
       if (url) prefetchImage(url)
     }
     lastPrefetchKeys = keySig
-  }
-
-  var needEnsure = {}
-  for (var j = 0; j < targets.length; j++) {
-    if (!resolveLevelImage(targets[j].level, targets[j].theme)) {
-      needEnsure[targets[j].theme.id] = true
-    }
-  }
-  var themeIds = Object.keys(needEnsure)
-  if (!themeIds.length) {
-    prefetchTargets(targets)
-    return Promise.resolve()
-  }
-
-  prefetchPromise = Promise.all(themeIds.map(function (id) {
-    return galleryData.ensureThemeLevels(id)
-  })).then(function () {
-    if (token !== prefetchToken) return
-    prefetchTargets(collectPrefetchTargets(themes))
   }).catch(function () {}).then(function () {
     prefetchPromise = null
   })
@@ -144,8 +127,8 @@ function prefetchNextLevelAssets() {
  * 点击关卡：最短转场时间内并行拉取大图，已缓存则几乎秒进
  */
 function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
-  if (!resolved || !resolved.image) {
-    try { wx.showToast({ title: '关卡图片地址缺失', icon: 'none' }) } catch (e) {}
+  if (!resolved || !resolved.key) {
+    try { wx.showToast({ title: '关卡数据缺失', icon: 'none' }) } catch (e) {}
     return
   }
   stamina.loadFromStorage().then(function () {
@@ -160,7 +143,19 @@ function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
       return
     }
     var delay = minDelayMs > 0 ? minDelayMs : 0
-    var loadP = prefetchLevelImage(resolved.image)
+    var imageUrl = resolved.image || imageProxy.buildLevelImageUrl(resolved.key)
+    var loadP
+    if (imageUrl) {
+      loadP = prefetchLevelImage(imageUrl)
+    } else {
+      loadP = imageProxy.fetchPlayLevel(resolved.key).then(function (play) {
+        if (!play || !play.imageUrl) throw new Error('no image')
+        resolved.image = play.imageUrl
+        if (play.grid) resolved.grid = play.grid
+        if (play.timeLimit) resolved.timeLimit = play.timeLimit
+        return prefetchLevelImage(play.imageUrl)
+      })
+    }
     var waitP = delay > 0
       ? new Promise(function (resolve) { setTimeout(resolve, delay) })
       : Promise.resolve()
@@ -181,6 +176,8 @@ function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
       levelKey: resolved.key,
       levelLabel: resolved.name
     }))
+  }).catch(function () {
+    try { wx.showToast({ title: '关卡图片加载失败', icon: 'none' }) } catch (e) {}
   })
 }
 
@@ -188,6 +185,7 @@ function resetPrefetchCache() {
   prefetchToken++
   lastPrefetchKeys = ''
   lastCoverUrl = ''
+  imageProxy.clearCache()
 }
 
 function prefetchHomeAssets() {

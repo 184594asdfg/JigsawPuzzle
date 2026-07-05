@@ -103,6 +103,19 @@ function consumeTool(userId, toolType) {
   })
 }
 
+function fetchPlayLevel(userId, levelKey) {
+  if (!userId || !levelKey) return Promise.reject(new Error('userId and levelKey required'))
+  return request.get(config.api.jigsawPlay, { userId: userId, levelKey: levelKey })
+}
+
+function fetchImageUrls(userId, levelKeys, opts) {
+  if (!userId || !levelKeys || !levelKeys.length) return Promise.resolve({ urls: {} })
+  var keys = levelKeys.join(',')
+  var query = { userId: userId, keys: keys }
+  if (opts && opts.thumb) query.thumb = 1
+  return request.get(config.api.jigsawImageUrls, query)
+}
+
 module.exports = {
   fetchThemes: fetchThemes,
   fetchThemeDetail: fetchThemeDetail,
@@ -111,5 +124,7 @@ module.exports = {
   fetchRank: fetchRank,
   fetchTools: fetchTools,
   grantTool: grantTool,
-  consumeTool: consumeTool
+  consumeTool: consumeTool,
+  fetchPlayLevel: fetchPlayLevel,
+  fetchImageUrls: fetchImageUrls
 }
