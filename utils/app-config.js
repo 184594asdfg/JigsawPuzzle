@@ -17,14 +17,14 @@ function getEnv() {
 }
 
 var API = {
-  development: 'https://vapi.pastecuts.cn/booksnap/api',
+  development: 'http://localhost:3003/api',
   production: 'https://vapi.pastecuts.cn/booksnap/api'
 }
 
 var env = getEnv()
 var baseURL = API[env] || API.production
 
-/** 仅作备注；关卡图已走 API 代理，不再直连 CDN */
+/** 仅作备注；关卡图已走 CDN 直链 */
 var cdnPrefix = 'https://cdn2.pastecuts.cn/pyGame/'
 
 /** 开发覆盖：非空时所有关卡用该图；正式环境留空，走接口 CDN */
@@ -44,12 +44,27 @@ function resolveGridSize(grid) {
 var levelImageW = 840
 var levelImageH = 1260
 
+var galleryThumbW = 404
+var galleryThumbH = 596
+
+/** CDN 直链：{cdnPrefix}{image_file}，缩略图走七牛 imageView2 */
+function buildCdnImageUrl(filename, opts) {
+  if (!filename) return ''
+  var base = cdnPrefix + String(filename).replace(/^\/+/, '')
+  if (!opts || !opts.thumb) return base
+  if (base.indexOf('imageView2') >= 0) return base
+  return base + '?imageView2/3/w/' + galleryThumbW + '/h/' + galleryThumbH + '/q/90/interlace/1/format/webp'
+}
+
 module.exports = {
   env: env,
   baseURL: baseURL,
   cdnPrefix: cdnPrefix,
   levelImageW: levelImageW,
   levelImageH: levelImageH,
+  galleryThumbW: galleryThumbW,
+  galleryThumbH: galleryThumbH,
+  buildCdnImageUrl: buildCdnImageUrl,
   allLevelsPreviewImage: allLevelsPreviewImage,
   puzzleGridSize: puzzleGridSize,
   defaultGrid: defaultGrid,

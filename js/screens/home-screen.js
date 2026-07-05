@@ -723,14 +723,28 @@ HomeScreen.prototype._startPuzzle = function () {
     var resolved = galleryData.resolveLevelForPlay(
       next.theme.id, next.level.key, next.level.level, next.level
     )
-    if (!resolved.image) {
-      resolved.image = imageProxy.buildLevelImageUrl(resolved.key)
+    function goPlay() {
+      if (!resolved.image) {
+        try { wx.showToast({ title: '图片地址缺失', icon: 'none' }) } catch (e) {}
+        return
+      }
+      prefetch.enterPuzzleWhenReady(self.manager, resolved, 0)
     }
-    if (!resolved.image) {
-      try { wx.showToast({ title: '请先登录以加载关卡图', icon: 'none' }) } catch (e) {}
+    if (resolved.image) {
+      goPlay()
       return
     }
-    prefetch.enterPuzzleWhenReady(self.manager, resolved, 0)
+    galleryData.prefetchLevelUrls([resolved.key]).then(function (urlMap) {
+      resolved.image = (urlMap && urlMap[resolved.key])
+        || imageProxy.buildLevelImageUrl(resolved.key)
+      if (!resolved.image) {
+        return imageProxy.fetchPlayLevel(resolved.key).then(function (play) {
+          if (play && play.imageUrl) resolved.image = play.imageUrl
+        })
+      }
+    }).then(goPlay).catch(function () {
+      try { wx.showToast({ title: '关卡图片加载失败', icon: 'none' }) } catch (e) {}
+    })
   }
 
   function tryOpen() {

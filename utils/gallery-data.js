@@ -31,11 +31,16 @@ function resolveLevelImage(theme, levelNum, level) {
   if (config.allLevelsPreviewImage) {
     return config.allLevelsPreviewImage
   }
-  var key = (level && level.key) ? level.key : buildLevelKey(theme && theme.id, levelNum)
-  return imageProxy.buildLevelImageUrl(key)
+  if (level && level.imageUrl) return level.imageUrl
+  if (level && level.imageFile) return config.buildCdnImageUrl(level.imageFile)
+  return imageProxy.buildLevelImageUrl(
+    (level && level.key) ? level.key : buildLevelKey(theme && theme.id, levelNum)
+  )
 }
 
 function resolveLevelThumbImage(theme, levelNum, level) {
+  if (level && level.thumbUrl) return level.thumbUrl
+  if (level && level.imageFile) return config.buildCdnImageUrl(level.imageFile, { thumb: true })
   var key = (level && level.key) ? level.key : buildLevelKey(theme && theme.id, levelNum)
   return imageProxy.buildLevelImageUrl(key, { thumb: true })
 }
@@ -71,13 +76,19 @@ function resolveLevelForPlay(themeId, levelKey, levelNum, partial) {
 function normalizeLevel(level, themeId) {
   var levelNum = level.level != null ? level.level : (level.levelNum || 0)
   var key = level.key || level.levelKey || buildLevelKey(themeId, levelNum)
+  var imageFile = level.imageFile || ''
+  var imageUrl = level.imageUrl || (imageFile ? config.buildCdnImageUrl(imageFile) : '')
+  var thumbUrl = level.thumbUrl || (imageFile ? config.buildCdnImageUrl(imageFile, { thumb: true }) : '')
   return {
     key: key,
     themeId: level.themeId || themeId || '',
     level: levelNum,
     name: level.name || '',
     grid: config.resolveGridSize(level.grid != null ? level.grid : level.gridSize),
-    timeLimit: level.timeLimit != null ? level.timeLimit : (level.timeLimitSec || 0)
+    timeLimit: level.timeLimit != null ? level.timeLimit : (level.timeLimitSec || 0),
+    imageFile: imageFile,
+    imageUrl: imageUrl,
+    thumbUrl: thumbUrl
   }
 }
 

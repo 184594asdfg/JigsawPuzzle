@@ -13,7 +13,6 @@ var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
 var remoteSync = require('../../utils/remote-sync')
 var prefetch = require('../../utils/prefetch')
-var imageProxy = require('../../utils/image-proxy')
 var user = require('../../utils/user')
 var sfx = require('../sfx')
 var pressAnim = require('../press-anim')
@@ -31,7 +30,6 @@ function GalleryScreen() {
   this.selectedTheme = ''
   this.currentTheme = null
   this.themes = []
-  this.dataLoading = false
   this.showImagePreview = false
   this.previewImage = ''
   this.pulseKey = ''
@@ -41,6 +39,8 @@ function GalleryScreen() {
   this._drag = null
   this._themeRowsHeight = 0
   this._pressAnim = null
+  this._thumbPrefetchToken = 0
+  this._thumbRetryPending = {}
 }
 GalleryScreen.prototype = Object.create(BaseScreen.prototype)
 GalleryScreen.prototype.constructor = GalleryScreen
@@ -49,18 +49,10 @@ GalleryScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
   var self = this
   assets.load(NAV_BACK_ICON)
-  if (galleryData.isLoaded()) {
-    this._refresh()
-  } else {
-    this.dataLoading = true
-  }
-  galleryData.loadThemes({ summary: true }).then(function () {
-    return user.autoLogin()
-  }).then(function () {
-    self.dataLoading = false
+  this._refresh()
+  remoteSync.syncOnEnter().then(function () {
     self._refresh()
   }).catch(function () {
-    self.dataLoading = false
     self._refresh()
   })
   prefetch.prefetchNextLevelAssets()
@@ -70,9 +62,15 @@ GalleryScreen.prototype.onResume = function () {
   var self = this
   remoteSync.syncOnEnter().then(function () {
     self._refresh()
+    if (self.selectedTheme && self.currentTheme) {
+      self._prefetchDoneLevelThumbs(self.currentTheme)
+    }
     prefetch.prefetchNextLevelAssets()
   }).catch(function () {
     self._refresh()
+    if (self.selectedTheme && self.currentTheme) {
+      self._prefetchDoneLevelThumbs(self.currentTheme)
+    }
     prefetch.prefetchNextLevelAssets()
   })
 }
@@ -144,25 +142,37 @@ GalleryScreen.prototype._buildCurrentTheme = function (themeId) {
   }
 }
 
-/** 批量预取本主题已完成关卡的缩略图 */
+/** 批量预取本主题已完成关卡的缩略图（CDN 直链，后台分批下载） */
 GalleryScreen.prototype._prefetchDoneLevelThumbs = function (themeData) {
-  if (!themeData || !themeData.levels || !themeData.levels.length) return Promise.resolve()
-  if (!user.getUserId()) return Promise.resolve()
-  var keys = []
+  if (!themeData || !themeData.levels || !themeData.levels.length) return
+
+  var urls = []
   for (var i = 0; i < themeData.levels.length; i++) {
-    if (themeData.levels[i].done && themeData.levels[i].key) {
-      keys.push(themeData.levels[i].key)
-    }
+    var lv = themeData.levels[i]
+    if (!lv.done) continue
+    var src = lv.thumbImage || lv.image
+    if (!src || assets.get(src)) continue
+    urls.push(src)
   }
-  if (!keys.length) return Promise.resolve()
-  return galleryData.prefetchLevelUrls(keys, { thumb: true }).then(function () {
-    for (var j = 0; j < themeData.levels.length; j++) {
-      var lv = themeData.levels[j]
-      if (!lv.done) continue
-      var src = lv.thumbImage || lv.image
-      if (src) prefetch.prefetchImage(src)
-    }
+  if (!urls.length) return
+
+  prefetch.loadImagesBatch(urls, {
+    concurrency: 6,
+    retries: 1,
+    delayMs: 40
   }).catch(function () {})
+}
+
+GalleryScreen.prototype._scheduleThumbRetry = function (src) {
+  if (!src || assets.get(src) || this._thumbRetryPending[src]) return
+  var self = this
+  this._thumbRetryPending[src] = true
+  setTimeout(function () {
+    delete self._thumbRetryPending[src]
+    if (assets.get(src)) return
+    if (!assets.hasFailed(src)) return
+    assets.retryLoad(src).catch(function () {})
+  }, 900)
 }
 
 // ---------------------------------------------------------------------------
@@ -189,14 +199,6 @@ GalleryScreen.prototype.render = function (ctx) {
 
   ctx.fillStyle = BG
   ctx.fillRect(0, 0, W, H)
-
-  if (this.dataLoading || !galleryData.isLoaded()) {
-    draw.fillTextCentered(
-      ctx, '加载图集中...', W / 2, H / 2,
-      '400 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif', TEXT_HEADER
-    )
-    return
-  }
 
   if (!this.themes.length) {
     var navY = rpx.safeTop()
@@ -392,15 +394,24 @@ GalleryScreen.prototype._drawLevelCard = function (ctx, level, x, y, w, h) {
   ctx.translate(-cx, -cy)
   draw.roundedRectPath(ctx, x, y, w, h, rpx.rpx(16))
   ctx.clip()
-  if (level.done && (level.thumbImage || level.image)) {
+  if (level.done) {
     var thumbSrc = level.thumbImage || level.image
-    var img = assets.get(thumbSrc)
-    if (img) {
-      draw.drawImageCover(ctx, img, x, y, w, h)
-    } else {
-      assets.tryLoad(thumbSrc)
+    if (!thumbSrc) {
       ctx.fillStyle = '#1f5c9c'
       ctx.fillRect(x, y, w, h)
+    } else {
+      var img = assets.get(thumbSrc)
+      if (img) {
+        draw.drawImageCover(ctx, img, x, y, w, h)
+      } else if (assets.hasFailed(thumbSrc)) {
+        this._scheduleThumbRetry(thumbSrc)
+        ctx.fillStyle = '#1f5c9c'
+        ctx.fillRect(x, y, w, h)
+      } else {
+        assets.tryLoad(thumbSrc)
+        ctx.fillStyle = '#1f5c9c'
+        ctx.fillRect(x, y, w, h)
+      }
     }
   } else {
     var ph = assets.get(galleryData.LEVEL_THUMB_PLACEHOLDER)
@@ -543,6 +554,7 @@ GalleryScreen.prototype._onBack = function () {
     return
   }
   if (this.selectedTheme) {
+    this._thumbPrefetchToken++
     this.selectedTheme = ''
     this.currentTheme = null
     this.pulseKey = ''
@@ -559,11 +571,28 @@ GalleryScreen.prototype._onTapTheme = function (item) {
     wx.showToast({ title: '请先通关上一主题', icon: 'none' })
     return
   }
+
+  var self = this
+  this._thumbPrefetchToken++
   this.selectedTheme = item.id
   this.currentTheme = this._buildCurrentTheme(item.id)
   this.scrollY = 0
+  this.pulseKey = ''
   this._prefetchDoneLevelThumbs(this.currentTheme)
-  prefetch.prefetchNextLevelAssets()
+
+  user.autoLogin().then(function () {
+    return progress.loadFromServer({ authoritative: true })
+  }).then(function () {
+    return galleryData.ensureThemeLevels(item.id)
+  }).then(function () {
+    if (self.selectedTheme !== item.id) return
+    self.currentTheme = self._buildCurrentTheme(item.id)
+    self._prefetchDoneLevelThumbs(self.currentTheme)
+    prefetch.prefetchNextLevelAssets()
+  }).catch(function () {
+    if (self.selectedTheme !== item.id) return
+    self._prefetchDoneLevelThumbs(self.currentTheme)
+  })
 }
 
 GalleryScreen.prototype._onTapLevel = function (level) {
@@ -582,7 +611,7 @@ GalleryScreen.prototype._onTapLevel = function (level) {
     level.themeId, level.key, level.level, level
   )
   if (!resolved.image) {
-    try { wx.showToast({ title: '请先登录以查看图片', icon: 'none' }) } catch (e) {}
+    try { wx.showToast({ title: '图片地址缺失', icon: 'none' }) } catch (e) {}
     return
   }
   var src = resolved.image
@@ -592,7 +621,7 @@ GalleryScreen.prototype._onTapLevel = function (level) {
     return
   }
   var self = this
-  assets.load(src).then(function () {
+  prefetch.prefetchLevelImage(src).then(function () {
     self.showImagePreview = true
     self.previewImage = src
   }).catch(function () {

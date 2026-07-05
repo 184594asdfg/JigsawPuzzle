@@ -112,22 +112,39 @@ function bootstrapData() {
   return remoteSync.syncOnEnter().then(function () {
     splash.hint = '正在同步进度...'
     splash.progress = Math.max(splash.progress, 0.78)
+    var galleryData = require('../utils/gallery-data')
+    var progress = require('../utils/progress')
+    var playable = progress.findFirstPlayableLevel(galleryData.getThemes())
+    var levelsP = playable && playable.theme
+      ? galleryData.ensureThemeLevels(playable.theme.id).catch(function () {})
+      : Promise.resolve()
+    return levelsP
+  }).then(function () {
     splash.hint = '正在加载界面资源...'
     splash.progress = Math.max(splash.progress, 0.82)
     return subpackUi.preloadAll()
   }).then(function () {
-    splash.hint = '正在加载主题封面...'
+    splash.hint = '正在加载关卡资源...'
     splash.progress = Math.max(splash.progress, 0.86)
-    return prefetch.waitForCurrentThemeCover(12000)
-  }).then(function (coverResult) {
-    if (coverResult && coverResult.ok && !coverResult.skipped) {
+    return Promise.all([
+      prefetch.waitForCurrentThemeCover(12000),
+      prefetch.waitForCurrentLevelImage(15000)
+    ])
+  }).then(function (results) {
+    var coverResult = results[0]
+    var levelResult = results[1]
+    if (levelResult && levelResult.ok && !levelResult.skipped) {
+      splash.hint = '加载完成'
+    } else if (levelResult && levelResult.timeout) {
+      splash.hint = '关卡图加载较慢，即将进入'
+    } else if (coverResult && coverResult.ok && !coverResult.skipped) {
       splash.hint = '加载完成'
     } else if (coverResult && coverResult.timeout) {
       splash.hint = '封面加载较慢，即将进入'
-    } else if (coverResult && coverResult.skipped) {
+    } else if (coverResult && coverResult.skipped && levelResult && levelResult.skipped) {
       splash.hint = '加载完成'
     } else {
-      splash.hint = '封面加载失败，即将进入'
+      splash.hint = '部分资源加载失败，即将进入'
     }
     splash.progress = Math.max(splash.progress, 0.95)
     prefetch.prefetchNextLevelAssets()
@@ -137,7 +154,10 @@ function bootstrapData() {
     return subpackUi.preloadAll().catch(function () {}).then(function () {
       return remoteSync.syncOnEnter().catch(function () {})
     }).then(function () {
-      return prefetch.waitForCurrentThemeCover(8000)
+      return Promise.all([
+        prefetch.waitForCurrentThemeCover(8000),
+        prefetch.waitForCurrentLevelImage(10000)
+      ])
     }).catch(function () {})
   })
 }

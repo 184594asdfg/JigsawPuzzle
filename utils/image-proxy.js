@@ -1,119 +1,88 @@
 /**
- * 拼图图片代理 URL（走 API，不拼 CDN）
+ * 拼图图片 URL：CDN 直链（主题/关卡接口带 imageUrl，或本地按 imageFile 拼接）
  */
 var config = require('./app-config')
-var request = require('./request')
-var user = require('./user')
 var jigsawApi = require('./jigsaw-api')
 
 var levelUrlCache = {}
-var coverUrlCache = {}
-
-function getUserId() {
-  return user.getUserId() || ''
-}
 
 function toAbsoluteUrl(pathOrUrl) {
   if (!pathOrUrl) return ''
   if (pathOrUrl.indexOf('http') === 0) return pathOrUrl
-  return request.buildUrl(pathOrUrl)
+  return pathOrUrl
 }
 
-function appendQuery(path, key, value) {
-  if (!path || !value) return path
-  var sep = path.indexOf('?') >= 0 ? '&' : '?'
-  return path + sep + encodeURIComponent(key) + '=' + encodeURIComponent(value)
-}
-
-function buildCoverUrl(themeId, opts) {
-  if (!themeId) return ''
-  var userId = getUserId()
-  if (!userId) return ''
-  var cacheKey = themeId + (opts && opts.thumb ? ':thumb' : '')
-  if (coverUrlCache[cacheKey]) return coverUrlCache[cacheKey]
-
-  var path = config.api.jigsawCover + '?themeId=' + encodeURIComponent(themeId)
-  path = appendQuery(path, 'userId', userId)
-  if (opts && opts.thumb) path = appendQuery(path, 'thumb', '1')
-  var url = toAbsoluteUrl(path)
-  coverUrlCache[cacheKey] = url
-  return url
+function cacheLevelUrl(levelKey, url, opts) {
+  if (!levelKey || !url) return
+  var cacheKey = levelKey + (opts && opts.thumb ? ':thumb' : '')
+  levelUrlCache[cacheKey] = url
 }
 
 function buildLevelImageUrl(levelKey, opts) {
   if (!levelKey) return ''
   if (config.allLevelsPreviewImage) return config.allLevelsPreviewImage
-  var userId = getUserId()
-  if (!userId) return ''
 
   var cacheKey = levelKey + (opts && opts.thumb ? ':thumb' : '')
   if (levelUrlCache[cacheKey]) return levelUrlCache[cacheKey]
 
-  var path = config.api.jigsawImage + '?levelKey=' + encodeURIComponent(levelKey)
-  path = appendQuery(path, 'userId', userId)
-  if (opts && opts.thumb) path = appendQuery(path, 'thumb', '1')
-  var url = toAbsoluteUrl(path)
-  levelUrlCache[cacheKey] = url
-  return url
+  var level = null
+  try {
+    level = require('./gallery-data').getLevelByKey(levelKey)
+  } catch (e) {}
+
+  if (level) {
+    if (opts && opts.thumb) {
+      if (level.thumbUrl) return level.thumbUrl
+      if (level.imageFile) return config.buildCdnImageUrl(level.imageFile, { thumb: true })
+    } else {
+      if (level.imageUrl) return level.imageUrl
+      if (level.imageFile) return config.buildCdnImageUrl(level.imageFile)
+    }
+  }
+  return ''
 }
 
-function resolveThemeCoverUrl(theme, opts) {
-  if (!theme) return ''
-  if (theme.themeImage) {
-    var userId = getUserId()
-    if (!userId) return ''
-    var base = toAbsoluteUrl(theme.themeImage)
-    if (base.indexOf('userId=') < 0) base = appendQuery(base, 'userId', userId)
-    if (opts && opts.thumb) base = appendQuery(base, 'thumb', '1')
-    return base
-  }
-  return buildCoverUrl(theme.id, opts)
+function resolveThemeCoverUrl(theme) {
+  if (!theme || !theme.themeImage) return ''
+  return toAbsoluteUrl(theme.themeImage)
 }
 
 function prefetchLevelUrls(levelKeys, opts) {
-  var userId = getUserId()
-  if (!userId || !levelKeys || !levelKeys.length) return Promise.resolve({})
-
-  var unique = []
-  var seen = {}
-  for (var i = 0; i < levelKeys.length; i++) {
-    var k = levelKeys[i]
-    if (!k || seen[k]) continue
-    seen[k] = true
-    unique.push(k)
-  }
-  if (!unique.length) return Promise.resolve({})
-
-  var chunkSize = 10
-  var chunks = []
-  for (var c = 0; c < unique.length; c += chunkSize) {
-    chunks.push(unique.slice(c, c + chunkSize))
-  }
+  if (!levelKeys || !levelKeys.length) return Promise.resolve({})
 
   var merged = {}
-  var chain = Promise.resolve()
-  chunks.forEach(function (chunk) {
-    chain = chain.then(function () {
-      return jigsawApi.fetchImageUrls(userId, chunk, opts).then(function (data) {
-        var urls = (data && data.urls) ? data.urls : {}
-        var keys = Object.keys(urls)
-        for (var j = 0; j < keys.length; j++) {
-          var key = keys[j]
-          var abs = toAbsoluteUrl(urls[key])
-          var cacheKey = key + (opts && opts.thumb ? ':thumb' : '')
-          levelUrlCache[cacheKey] = abs
-          merged[key] = abs
-        }
-      })
-    })
+  var missing = []
+  for (var i = 0; i < levelKeys.length; i++) {
+    var k = levelKeys[i]
+    if (!k) continue
+    var url = buildLevelImageUrl(k, opts)
+    if (url) {
+      merged[k] = url
+      cacheLevelUrl(k, url, opts)
+    } else {
+      missing.push(k)
+    }
+  }
+  if (!missing.length) return Promise.resolve(merged)
+
+  return jigsawApi.fetchImageUrls(missing, opts).then(function (data) {
+    var urls = (data && data.urls) ? data.urls : {}
+    var keys = Object.keys(urls)
+    for (var j = 0; j < keys.length; j++) {
+      var key = keys[j]
+      var abs = toAbsoluteUrl(urls[key])
+      cacheLevelUrl(key, abs, opts)
+      merged[key] = abs
+    }
+    return merged
+  }).catch(function () {
+    return merged
   })
-  return chain.then(function () { return merged })
 }
 
 function fetchPlayLevel(levelKey) {
-  var userId = getUserId()
-  if (!userId || !levelKey) return Promise.reject(new Error('missing userId or levelKey'))
-  return jigsawApi.fetchPlayLevel(userId, levelKey).then(function (data) {
+  if (!levelKey) return Promise.reject(new Error('levelKey required'))
+  return jigsawApi.fetchPlayLevel(levelKey).then(function (data) {
     if (data && data.imageUrl) {
       data.imageUrl = toAbsoluteUrl(data.imageUrl)
       levelUrlCache[levelKey] = data.imageUrl
@@ -124,11 +93,9 @@ function fetchPlayLevel(levelKey) {
 
 function clearCache() {
   levelUrlCache = {}
-  coverUrlCache = {}
 }
 
 module.exports = {
-  buildCoverUrl: buildCoverUrl,
   buildLevelImageUrl: buildLevelImageUrl,
   resolveThemeCoverUrl: resolveThemeCoverUrl,
   prefetchLevelUrls: prefetchLevelUrls,

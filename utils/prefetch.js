@@ -19,6 +19,54 @@ function prefetchImage(url) {
   assets.load(url).catch(function () {})
 }
 
+/**
+ * 分批下载图片（图集缩略图等），带重试与间隔，避免并发打满代理限流
+ */
+function loadImagesBatch(urls, opts) {
+  opts = opts || {}
+  var concurrency = opts.concurrency > 0 ? opts.concurrency : 3
+  var retries = opts.retries != null ? opts.retries : 2
+  var delayMs = opts.delayMs != null ? opts.delayMs : 120
+
+  var unique = []
+  var seen = {}
+  for (var i = 0; i < (urls || []).length; i++) {
+    var u = urls[i]
+    if (!u || seen[u] || assets.get(u)) continue
+    seen[u] = true
+    unique.push(u)
+  }
+  if (!unique.length) return Promise.resolve()
+
+  function loadOne(url, attempt) {
+    if (assets.get(url)) return Promise.resolve()
+    var loader = attempt > 0 ? assets.retryLoad(url) : assets.load(url)
+    return loader.catch(function () {
+      if (attempt >= retries) return null
+      return new Promise(function (resolve) {
+        setTimeout(resolve, 350 * (attempt + 1))
+      }).then(function () {
+        return loadOne(url, attempt + 1)
+      })
+    })
+  }
+
+  var index = 0
+  function runBatch() {
+    if (index >= unique.length) return Promise.resolve()
+    var batch = unique.slice(index, index + concurrency)
+    index += concurrency
+    return Promise.all(batch.map(function (u) { return loadOne(u, 0) })).then(function () {
+      if (index >= unique.length) return Promise.resolve()
+      return new Promise(function (resolve) {
+        setTimeout(resolve, delayMs)
+      }).then(runBatch)
+    })
+  }
+
+  return runBatch()
+}
+
 function prefetchLevelImage(url) {
   if (!url) return Promise.resolve(null)
   if (assets.get(url)) return Promise.resolve(assets.get(url))
@@ -35,6 +83,18 @@ function getCurrentThemeCoverUrl() {
   var next = progress.getNextLevel(galleryData.getThemes())
   if (!next || !next.theme) return ''
   return imageProxy.resolveThemeCoverUrl(next.theme)
+}
+
+function getCurrentPlayableLevel() {
+  if (!galleryData.isLoaded()) return null
+  return progress.findFirstPlayableLevel(galleryData.getThemes())
+}
+
+/** 当前可玩关卡大图 URL（CDN 直链） */
+function getCurrentLevelImageUrl() {
+  var next = getCurrentPlayableLevel()
+  if (!next || !next.theme || !next.level) return ''
+  return resolveLevelImage(next.level, next.theme)
 }
 
 function prefetchCurrentThemeCover() {
@@ -71,6 +131,39 @@ function waitForCurrentThemeCover(timeoutMs) {
   return Promise.race([loadP, timeoutP])
 }
 
+/**
+ * 阻塞等待当前可玩关卡大图（启动进首页用，与封面并行）
+ * @returns {Promise<{ok:boolean, skipped?:boolean, timeout?:boolean, url?:string}>}
+ */
+function waitForCurrentLevelImage(timeoutMs) {
+  var playable = getCurrentPlayableLevel()
+  if (!playable || !playable.level || !playable.level.key) {
+    return Promise.resolve({ ok: true, skipped: true })
+  }
+
+  var levelKey = playable.level.key
+  var url = getCurrentLevelImageUrl()
+  if (!url) return Promise.resolve({ ok: true, skipped: true })
+  if (assets.get(url)) return Promise.resolve({ ok: true, url: url })
+
+  var loadP = galleryData.prefetchLevelUrls([levelKey]).catch(function () {}).then(function () {
+    var freshUrl = getCurrentLevelImageUrl() || url
+    return assets.load(freshUrl).then(function (img) {
+      return { ok: !!img, url: freshUrl }
+    }).catch(function () {
+      return { ok: false, url: freshUrl }
+    })
+  })
+
+  var ms = timeoutMs > 0 ? timeoutMs : 15000
+  var timeoutP = new Promise(function (resolve) {
+    setTimeout(function () {
+      resolve({ ok: false, url: url, timeout: true })
+    }, ms)
+  })
+  return Promise.race([loadP, timeoutP])
+}
+
 function collectPrefetchTargets(themes) {
   var list = []
   var seen = {}
@@ -89,7 +182,6 @@ function collectPrefetchTargets(themes) {
 
 function prefetchNextLevelAssets() {
   if (!galleryData.isLoaded()) return Promise.resolve()
-  if (!user.getUserId()) return Promise.resolve()
   if (prefetchPromise) return prefetchPromise
 
   var token = ++prefetchToken
@@ -144,18 +236,24 @@ function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
     }
     var delay = minDelayMs > 0 ? minDelayMs : 0
     var imageUrl = resolved.image || imageProxy.buildLevelImageUrl(resolved.key)
-    var loadP
-    if (imageUrl) {
-      loadP = prefetchLevelImage(imageUrl)
-    } else {
-      loadP = imageProxy.fetchPlayLevel(resolved.key).then(function (play) {
+  var loadP
+  if (imageUrl) {
+    loadP = prefetchLevelImage(imageUrl).catch(function () {
+      return imageProxy.fetchPlayLevel(resolved.key).then(function (play) {
         if (!play || !play.imageUrl) throw new Error('no image')
         resolved.image = play.imageUrl
-        if (play.grid) resolved.grid = play.grid
-        if (play.timeLimit) resolved.timeLimit = play.timeLimit
         return prefetchLevelImage(play.imageUrl)
       })
-    }
+    })
+  } else {
+    loadP = imageProxy.fetchPlayLevel(resolved.key).then(function (play) {
+      if (!play || !play.imageUrl) throw new Error('no image')
+      resolved.image = play.imageUrl
+      if (play.grid) resolved.grid = play.grid
+      if (play.timeLimit) resolved.timeLimit = play.timeLimit
+      return prefetchLevelImage(play.imageUrl)
+    })
+  }
     var waitP = delay > 0
       ? new Promise(function (resolve) { setTimeout(resolve, delay) })
       : Promise.resolve()
@@ -197,10 +295,13 @@ function prefetchHomeAssets() {
 
 module.exports = {
   prefetchImage: prefetchImage,
+  loadImagesBatch: loadImagesBatch,
   prefetchLevelImage: prefetchLevelImage,
   getCurrentThemeCoverUrl: getCurrentThemeCoverUrl,
+  getCurrentLevelImageUrl: getCurrentLevelImageUrl,
   prefetchCurrentThemeCover: prefetchCurrentThemeCover,
   waitForCurrentThemeCover: waitForCurrentThemeCover,
+  waitForCurrentLevelImage: waitForCurrentLevelImage,
   prefetchNextLevelAssets: prefetchNextLevelAssets,
   prefetchHomeAssets: prefetchHomeAssets,
   enterPuzzleWhenReady: enterPuzzleWhenReady,

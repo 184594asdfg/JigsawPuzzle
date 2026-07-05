@@ -103,15 +103,15 @@ function consumeTool(userId, toolType) {
   })
 }
 
-function fetchPlayLevel(userId, levelKey) {
-  if (!userId || !levelKey) return Promise.reject(new Error('userId and levelKey required'))
-  return request.get(config.api.jigsawPlay, { userId: userId, levelKey: levelKey })
+function fetchPlayLevel(levelKey) {
+  if (!levelKey) return Promise.reject(new Error('levelKey required'))
+  return request.get(config.api.jigsawPlay, { levelKey: levelKey })
 }
 
-function fetchImageUrls(userId, levelKeys, opts) {
-  if (!userId || !levelKeys || !levelKeys.length) return Promise.resolve({ urls: {} })
+function fetchImageUrls(levelKeys, opts) {
+  if (!levelKeys || !levelKeys.length) return Promise.resolve({ urls: {} })
   var keys = levelKeys.join(',')
-  var query = { userId: userId, keys: keys }
+  var query = { keys: keys }
   if (opts && opts.thumb) query.thumb = 1
   return request.get(config.api.jigsawImageUrls, query)
 }
