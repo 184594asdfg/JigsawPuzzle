@@ -1,10 +1,4 @@
 /**
- * 小游戏入口
- * 【隐私合规】必须在所有业务逻辑之前注册 onNeedPrivacyAuthorization，否则 getUserProfile 报 errno:1026
+ * 小游戏入口（隐私授权由 MP 官方弹窗处理，无需额外初始化）
  */
-try {
-  require('./utils/wx-privacy-profile').initPrivacyGlobal()
-} catch (e) {
-  console.warn('[game] initPrivacyGlobal failed', e)
-}
 require('./js/main.js')

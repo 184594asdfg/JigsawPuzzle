@@ -286,11 +286,6 @@ function showProfileError(err, opts) {
   console.warn('[user] profile error', err)
 }
 
-/** 转发至 wx-privacy-profile 全局初始化（game.js / app.js 入口调用） */
-function initPrivacyAuthorization() {
-  return privacyProfile.initPrivacyGlobal()
-}
-
 /**
  * 用户点击头像：同步 getUserProfile；小游戏失败时兜底 createUserInfoButton
  * @param {object} [style] 头像区域 {x,y,w,h}，兜底按钮定位用
@@ -436,6 +431,5 @@ module.exports = {
   destroyProfileButton: destroyProfileButton,
   clearProfileAuthorizePending: clearProfileAuthorizePending,
   showProfileError: showProfileError,
-  initPrivacyAuthorization: initPrivacyAuthorization,
   privacyProfile: privacyProfile
 }
