@@ -15,6 +15,8 @@ var GALLERY_THUMB_QUALITY = 90
 
 var THEME_CARD_UNLOCKED = 'images/themes/theme-unlocked.png'
 var THEME_CARD_LOCKED = 'images/themes/theme-locked.png'
+/** 已解锁主题卡片第 3 层：边框/飘带等（中间透明，露出封面） */
+var THEME_CARD_UNLOCKED_OVERLAY = 'images/themes/theme-unlocked-overlay.png'
 var LEVEL_THUMB_PLACEHOLDER = 'images/themes/level-placeholder.png'
 
 var THEMES = []
@@ -43,6 +45,31 @@ function resolveLevelThumbImage(theme, levelNum, level) {
   if (level && level.imageFile) return config.buildCdnImageUrl(level.imageFile, { thumb: true })
   var key = (level && level.key) ? level.key : buildLevelKey(theme && theme.id, levelNum)
   return imageProxy.buildLevelImageUrl(key, { thumb: true })
+}
+
+function appendGalleryThumbQuery(url) {
+  if (!url) return ''
+  if (url.indexOf('imageView2') >= 0) return url
+  return url + '?imageView2/3/w/' + GALLERY_THUMB_W + '/h/' + GALLERY_THUMB_H +
+    '/q/' + GALLERY_THUMB_QUALITY + '/interlace/1/format/webp'
+}
+
+/** 主题封面原图（CDN 直链） */
+function resolveThemeCoverImage(theme) {
+  if (!theme) return ''
+  if (theme.themeImage) return theme.themeImage
+  if (theme.coverFile) return config.buildCdnImageUrl(theme.coverFile)
+  return imageProxy.resolveThemeCoverUrl(theme)
+}
+
+/** 图集主题卡片缩略图（七牛 imageView2） */
+function resolveThemeThumbImage(theme) {
+  if (!theme) return ''
+  if (theme.themeThumbUrl) return theme.themeThumbUrl
+  if (theme.coverFile) return config.buildCdnImageUrl(theme.coverFile, { thumb: true })
+  var cover = theme.themeImage || ''
+  if (cover) return appendGalleryThumbQuery(cover)
+  return ''
 }
 
 function resolveLevelForPlay(themeId, levelKey, levelNum, partial) {
@@ -107,6 +134,7 @@ function normalizeTheme(theme) {
     icon: theme.icon || '',
     accent: theme.accent || '',
     themeImage: theme.themeImage || '',
+    coverFile: theme.coverFile || '',
     totalLevels: totalLevels,
     levels: levels,
     levelsLoaded: levels.length > 0
@@ -235,6 +263,7 @@ module.exports = {
   LEVELS_PER_THEME: LEVELS_PER_THEME,
   THEME_CARD_UNLOCKED: THEME_CARD_UNLOCKED,
   THEME_CARD_LOCKED: THEME_CARD_LOCKED,
+  THEME_CARD_UNLOCKED_OVERLAY: THEME_CARD_UNLOCKED_OVERLAY,
   LEVEL_THUMB_PLACEHOLDER: LEVEL_THUMB_PLACEHOLDER,
   loadThemes: loadThemes,
   ensureThemeLevels: ensureThemeLevels,
@@ -247,6 +276,8 @@ module.exports = {
   buildLevelKey: buildLevelKey,
   resolveLevelImage: resolveLevelImage,
   resolveLevelThumbImage: resolveLevelThumbImage,
+  resolveThemeCoverImage: resolveThemeCoverImage,
+  resolveThemeThumbImage: resolveThemeThumbImage,
   resolveLevelForPlay: resolveLevelForPlay,
   prefetchLevelUrls: imageProxy.prefetchLevelUrls,
   GALLERY_THUMB_W: GALLERY_THUMB_W,

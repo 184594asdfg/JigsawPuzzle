@@ -203,7 +203,7 @@ PuzzleScreen.prototype._initEngine = function () {
   var board = this.engine.boardSize()
   this.engine.setBoardPosition(
     Math.floor((W - board.w) / 2),
-    countdownY + countdownH + rpx.rpx(COUNTDOWN_GAP_RPX)
+    Math.round(countdownY + countdownH + rpx.rpx(COUNTDOWN_GAP_RPX))
   )
   var src = this.imageSrc
   if (assets.hasFailed(src)) assets.clearFailed(src)

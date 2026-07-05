@@ -24,6 +24,13 @@ var TEXT_HEADER = '#ffffff'
 var NAV_BACK_ICON = 'images/icons/gallery_back.png'
 var NAV_BACK_LEFT_RPX = 24
 var NAV_BACK_SIZE_RPX = 72
+/** 已解锁主题：CDN 封面相对卡片的内边距（rpx / 比例） */
+var THEME_COVER_PAD_X_RPX = 10
+var THEME_COVER_PAD_TOP_RPX = 8
+var THEME_COVER_OFFSET_Y_RPX = 15
+var THEME_COVER_STRETCH_Y_RPX = 12
+var THEME_COVER_RADIUS_RPX = 20
+var THEME_COVER_PAD_BOTTOM_RATIO = 0.22
 
 function GalleryScreen() {
   BaseScreen.call(this)
@@ -49,6 +56,9 @@ GalleryScreen.prototype.onEnter = function (manager) {
   BaseScreen.prototype.onEnter.call(this, manager)
   var self = this
   assets.load(NAV_BACK_ICON)
+  assets.load(galleryData.THEME_CARD_LOCKED)
+  assets.load(galleryData.THEME_CARD_UNLOCKED)
+  assets.load(galleryData.THEME_CARD_UNLOCKED_OVERLAY)
   this._refresh()
   remoteSync.syncOnEnter().then(function () {
     self._refresh()
@@ -81,11 +91,15 @@ GalleryScreen.prototype._refresh = function () {
   for (var i = 0; i < defs.length; i++) {
     var t = defs[i]
     var unlocked = i === 0 || progress.countThemeCompleted(defs[i - 1]) >= defs[i - 1].totalLevels
+    var cardImage = galleryData.THEME_CARD_LOCKED
+    if (unlocked) {
+      cardImage = galleryData.resolveThemeThumbImage(t) || galleryData.THEME_CARD_UNLOCKED
+    }
     list.push({
       id: t.id,
       name: t.name,
       unlocked: unlocked,
-      cardImage: unlocked ? galleryData.THEME_CARD_UNLOCKED : galleryData.THEME_CARD_LOCKED,
+      cardImage: cardImage,
       completed: progress.countThemeCompleted(t),
       totalLevels: t.totalLevels,
       raw: t
@@ -94,6 +108,9 @@ GalleryScreen.prototype._refresh = function () {
   this.themes = list
   if (this.selectedTheme) {
     this.currentTheme = this._buildCurrentTheme(this.selectedTheme)
+  }
+  if (!this.selectedTheme) {
+    this._prefetchUnlockedThemeCovers()
   }
   prefetch.prefetchNextLevelAssets()
   this.scrollY = 0
@@ -140,6 +157,28 @@ GalleryScreen.prototype._buildCurrentTheme = function (themeId) {
     totalLevels: total,
     levels: levels
   }
+}
+
+/** 批量预取已解锁主题的封面缩略图（CDN 直链，后台分批下载） */
+GalleryScreen.prototype._prefetchUnlockedThemeCovers = function () {
+  if (!this.themes || !this.themes.length) return
+
+  var urls = []
+  for (var i = 0; i < this.themes.length; i++) {
+    var item = this.themes[i]
+    if (!item.unlocked) continue
+    var src = item.cardImage
+    if (!src || src.indexOf('http') !== 0) continue
+    if (assets.get(src)) continue
+    urls.push(src)
+  }
+  if (!urls.length) return
+
+  prefetch.loadImagesBatch(urls, {
+    concurrency: 6,
+    retries: 1,
+    delayMs: 40
+  }).catch(function () {})
 }
 
 /** 批量预取本主题已完成关卡的缩略图（CDN 直链，后台分批下载） */
@@ -306,33 +345,82 @@ GalleryScreen.prototype._drawThemeGrid = function (ctx, bodyY, W) {
   return y + rpx.rpx(24)
 }
 
-GalleryScreen.prototype._drawThemeCard = function (ctx, item, x, y, w, h) {
-  var img = assets.get(item.cardImage)
-  ctx.save()
-  draw.roundedRectPath(ctx, x, y, w, h, rpx.rpx(16))
-  ctx.clip()
-  if (img) {
-    draw.drawImageCover(ctx, img, x, y, w, h)
-  } else {
-    ctx.fillStyle = item.unlocked ? '#4ea893' : '#7da89b'
-    ctx.fillRect(x, y, w, h)
+GalleryScreen.prototype._themeCoverInnerRect = function (x, y, w, h) {
+  var padX = rpx.rpx(THEME_COVER_PAD_X_RPX)
+  var padTop = rpx.rpx(THEME_COVER_PAD_TOP_RPX) + rpx.rpx(THEME_COVER_OFFSET_Y_RPX)
+  var padBottom = h * THEME_COVER_PAD_BOTTOM_RATIO
+  var stretchY = rpx.rpx(THEME_COVER_STRETCH_Y_RPX)
+  return {
+    x: x + padX,
+    y: y + padTop - stretchY,
+    w: Math.max(0, w - padX * 2),
+    h: Math.max(0, h - padTop - padBottom + stretchY * 2)
   }
+}
+
+GalleryScreen.prototype._drawThemeCard = function (ctx, item, x, y, w, h) {
+  var radius = rpx.rpx(16)
+
   if (!item.unlocked) {
+    ctx.save()
+    draw.roundedRectPath(ctx, x, y, w, h, radius)
+    ctx.clip()
+    var lockedImg = assets.get(galleryData.THEME_CARD_LOCKED)
+    if (lockedImg) {
+      draw.drawImageCover(ctx, lockedImg, x, y, w, h)
+    } else {
+      assets.tryLoad(galleryData.THEME_CARD_LOCKED)
+      ctx.fillStyle = '#7da89b'
+      ctx.fillRect(x, y, w, h)
+    }
     ctx.fillStyle = 'rgba(255,255,255,0.05)'
     ctx.fillRect(x, y, w, h)
-  }
-  ctx.restore()
+    ctx.restore()
+    draw.strokeRoundedRect(
+      ctx, x + 0.5, y + 0.5, w - 1, h - 1,
+      radius, 'rgba(255,255,255,0.12)', 1
+    )
+  } else {
+    // 第 1 层：底框
+    var frame = assets.get(galleryData.THEME_CARD_UNLOCKED)
+    if (frame) {
+      draw.drawImageCover(ctx, frame, x, y, w, h)
+    } else {
+      assets.tryLoad(galleryData.THEME_CARD_UNLOCKED)
+    }
 
-  // 进度徽标
+    // 第 2 层：主题封面（圆角 + 轻阴影）
+    var inner = this._themeCoverInnerRect(x, y, w, h)
+    var innerRadius = rpx.rpx(THEME_COVER_RADIUS_RPX)
+
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.28)'
+    ctx.shadowBlur = rpx.rpx(10)
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = rpx.rpx(4)
+    draw.fillRoundedRect(ctx, inner.x, inner.y, inner.w, inner.h, innerRadius, 'rgba(0,0,0,0.02)')
+    ctx.restore()
+
+    ctx.save()
+    draw.roundedRectPath(ctx, inner.x, inner.y, inner.w, inner.h, innerRadius)
+    ctx.clip()
+    this._drawThemeCardCover(ctx, item, inner.x, inner.y, inner.w, inner.h)
+    ctx.restore()
+
+    // 第 3 层：装饰叠图（飘带/外框，中间透明）
+    this._drawThemeCardOverlay(ctx, x, y, w, h)
+  }
+
+  // 第 4 层：进度数字（最上）
   var badge = item.completed + '/' + item.totalLevels
   ctx.font = '600 ' + rpx.rpx(23).toFixed(0) + 'px sans-serif'
   ctx.textBaseline = 'top'
   ctx.textAlign = 'left'
   ctx.lineWidth = rpx.rpx(2)
   ctx.strokeStyle = '#000000'
-  ctx.strokeText(badge, x + rpx.rpx(33), y + rpx.rpx(35))
+  ctx.strokeText(badge, x + rpx.rpx(18), y + rpx.rpx(35))
   ctx.fillStyle = '#ffffff'
-  ctx.fillText(badge, x + rpx.rpx(33), y + rpx.rpx(35))
+  ctx.fillText(badge, x + rpx.rpx(18), y + rpx.rpx(35))
 
   // 底部主题名
   draw.fillTextCentered(
@@ -346,6 +434,41 @@ GalleryScreen.prototype._drawThemeCard = function (ctx, item, x, y, w, h) {
     { x: x, y: y, w: w, h: h },
     function () { self._onTapTheme(item) }
   )
+}
+
+GalleryScreen.prototype._drawThemeCardCover = function (ctx, item, x, y, w, h) {
+  var thumbSrc = item.cardImage
+  var isRemote = thumbSrc && thumbSrc.indexOf('http') === 0
+
+  if (!thumbSrc || !isRemote) {
+    ctx.fillStyle = '#4ea893'
+    ctx.fillRect(x, y, w, h)
+    return
+  }
+
+  var img = assets.get(thumbSrc)
+  if (img) {
+    draw.drawImageCover(ctx, img, x, y, w, h)
+    return
+  }
+  if (assets.hasFailed(thumbSrc)) {
+    this._scheduleThumbRetry(thumbSrc)
+    ctx.fillStyle = '#4ea893'
+    ctx.fillRect(x, y, w, h)
+    return
+  }
+  assets.tryLoad(thumbSrc)
+  ctx.fillStyle = '#4ea893'
+  ctx.fillRect(x, y, w, h)
+}
+
+GalleryScreen.prototype._drawThemeCardOverlay = function (ctx, x, y, w, h) {
+  var overlay = assets.get(galleryData.THEME_CARD_UNLOCKED_OVERLAY)
+  if (overlay) {
+    draw.drawImageCover(ctx, overlay, x, y, w, h)
+  } else {
+    assets.tryLoad(galleryData.THEME_CARD_UNLOCKED_OVERLAY)
+  }
 }
 
 GalleryScreen.prototype._drawLevelGrid = function (ctx, bodyY, W) {

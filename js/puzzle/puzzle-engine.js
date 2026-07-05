@@ -682,8 +682,8 @@ PuzzleEngine.prototype.render = function (ctx) {
     this._startIntroAnim()
   }
 
-  var bx = this.boardX
-  var by = this.boardY
+  var bx = Math.round(this.boardX)
+  var by = Math.round(this.boardY)
   var L = this.layout
   var flipSt = (this._intro && this._intro.phase === 'flip') ? this._introFlipState() : null
 
@@ -734,8 +734,8 @@ PuzzleEngine.prototype._renderGroupDragShadow = function (ctx, bx, by, group, gt
   var cellW = L.cellW
   var cellH = L.cellH
   var R = L.PIECE_RADIUS
-  var ox = bx + group.x + gtx
-  var oy = by + group.y + gty
+  var ox = Math.round(bx + group.x + gtx)
+  var oy = Math.round(by + group.y + gty)
 
   ctx.save()
   ctx.shadowColor = 'rgba(0,0,0,0.35)'
@@ -755,8 +755,8 @@ PuzzleEngine.prototype._renderGroupDragShadow = function (ctx, bx, by, group, gt
       if (att.bottom || att.right) br = 0
       if (att.bottom || att.left) bl = 0
     }
-    var px = ox + p.localX + this._pieceTx(p)
-    var py = oy + p.localY + this._pieceTy(p)
+    var px = Math.round(ox + p.localX + this._pieceTx(p))
+    var py = Math.round(oy + p.localY + this._pieceTy(p))
     draw.roundedRectPathCorners(ctx, px, py, cellW, cellH, tl, tr, br, bl)
   }
   // 一次 fill 产生整组外轮廓阴影，避免子块接缝处叠影
@@ -793,6 +793,8 @@ PuzzleEngine.prototype._renderGroup = function (ctx, group, bx, by, L, withShado
 }
 
 PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow, showBack, flipSt) {
+  x = Math.round(x)
+  y = Math.round(y)
   var cellW = L.cellW
   var cellH = L.cellH
   if (flipSt) {

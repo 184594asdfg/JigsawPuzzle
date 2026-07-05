@@ -54,6 +54,7 @@ var CORE_ASSETS = [
   'images/icons/stamina_modal.png',
   'images/icons/btn_stamina_recover.png',
   'images/themes/theme-unlocked.png',
+  'images/themes/theme-unlocked-overlay.png',
   'images/themes/theme-locked.png',
   'images/themes/level-placeholder.png',
   'images/puzzle-card-back.png',
