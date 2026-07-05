@@ -13,6 +13,8 @@ var galleryData = require('../../utils/gallery-data')
 var progress = require('../../utils/progress')
 var remoteSync = require('../../utils/remote-sync')
 var prefetch = require('../../utils/prefetch')
+var imageProxy = require('../../utils/image-proxy')
+var user = require('../../utils/user')
 var sfx = require('../sfx')
 var pressAnim = require('../press-anim')
 
@@ -53,6 +55,8 @@ GalleryScreen.prototype.onEnter = function (manager) {
     this.dataLoading = true
   }
   galleryData.loadThemes({ summary: true }).then(function () {
+    return user.autoLogin()
+  }).then(function () {
     self.dataLoading = false
     self._refresh()
   }).catch(function () {
@@ -138,6 +142,27 @@ GalleryScreen.prototype._buildCurrentTheme = function (themeId) {
     totalLevels: total,
     levels: levels
   }
+}
+
+/** 批量预取本主题已完成关卡的缩略图 */
+GalleryScreen.prototype._prefetchDoneLevelThumbs = function (themeData) {
+  if (!themeData || !themeData.levels || !themeData.levels.length) return Promise.resolve()
+  if (!user.getUserId()) return Promise.resolve()
+  var keys = []
+  for (var i = 0; i < themeData.levels.length; i++) {
+    if (themeData.levels[i].done && themeData.levels[i].key) {
+      keys.push(themeData.levels[i].key)
+    }
+  }
+  if (!keys.length) return Promise.resolve()
+  return galleryData.prefetchLevelUrls(keys, { thumb: true }).then(function () {
+    for (var j = 0; j < themeData.levels.length; j++) {
+      var lv = themeData.levels[j]
+      if (!lv.done) continue
+      var src = lv.thumbImage || lv.image
+      if (src) prefetch.prefetchImage(src)
+    }
+  }).catch(function () {})
 }
 
 // ---------------------------------------------------------------------------
@@ -537,6 +562,7 @@ GalleryScreen.prototype._onTapTheme = function (item) {
   this.selectedTheme = item.id
   this.currentTheme = this._buildCurrentTheme(item.id)
   this.scrollY = 0
+  this._prefetchDoneLevelThumbs(this.currentTheme)
   prefetch.prefetchNextLevelAssets()
 }
 
@@ -556,12 +582,22 @@ GalleryScreen.prototype._onTapLevel = function (level) {
     level.themeId, level.key, level.level, level
   )
   if (!resolved.image) {
-    try { wx.showToast({ title: '图片加载中', icon: 'none' }) } catch (e) {}
+    try { wx.showToast({ title: '请先登录以查看图片', icon: 'none' }) } catch (e) {}
     return
   }
-  if (!assets.get(resolved.image)) assets.tryLoad(resolved.image)
-  this.showImagePreview = true
-  this.previewImage = resolved.image
+  var src = resolved.image
+  if (assets.get(src)) {
+    this.showImagePreview = true
+    this.previewImage = src
+    return
+  }
+  var self = this
+  assets.load(src).then(function () {
+    self.showImagePreview = true
+    self.previewImage = src
+  }).catch(function () {
+    try { wx.showToast({ title: '图片加载失败', icon: 'none' }) } catch (e) {}
+  })
 }
 
 GalleryScreen.prototype._closeImagePreview = function () {

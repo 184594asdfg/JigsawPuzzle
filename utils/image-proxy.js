@@ -74,18 +74,40 @@ function prefetchLevelUrls(levelKeys, opts) {
   var userId = getUserId()
   if (!userId || !levelKeys || !levelKeys.length) return Promise.resolve({})
 
-  return jigsawApi.fetchImageUrls(userId, levelKeys, opts).then(function (data) {
-    var urls = (data && data.urls) ? data.urls : {}
-    var keys = Object.keys(urls)
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i]
-      var abs = toAbsoluteUrl(urls[k])
-      var cacheKey = k + (opts && opts.thumb ? ':thumb' : '')
-      levelUrlCache[cacheKey] = abs
-      urls[k] = abs
-    }
-    return urls
+  var unique = []
+  var seen = {}
+  for (var i = 0; i < levelKeys.length; i++) {
+    var k = levelKeys[i]
+    if (!k || seen[k]) continue
+    seen[k] = true
+    unique.push(k)
+  }
+  if (!unique.length) return Promise.resolve({})
+
+  var chunkSize = 10
+  var chunks = []
+  for (var c = 0; c < unique.length; c += chunkSize) {
+    chunks.push(unique.slice(c, c + chunkSize))
+  }
+
+  var merged = {}
+  var chain = Promise.resolve()
+  chunks.forEach(function (chunk) {
+    chain = chain.then(function () {
+      return jigsawApi.fetchImageUrls(userId, chunk, opts).then(function (data) {
+        var urls = (data && data.urls) ? data.urls : {}
+        var keys = Object.keys(urls)
+        for (var j = 0; j < keys.length; j++) {
+          var key = keys[j]
+          var abs = toAbsoluteUrl(urls[key])
+          var cacheKey = key + (opts && opts.thumb ? ':thumb' : '')
+          levelUrlCache[cacheKey] = abs
+          merged[key] = abs
+        }
+      })
+    })
   })
+  return chain.then(function () { return merged })
 }
 
 function fetchPlayLevel(levelKey) {

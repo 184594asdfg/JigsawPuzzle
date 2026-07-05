@@ -40,10 +40,16 @@ function resolveGridSize(grid) {
   return defaultGrid
 }
 
+/** 关卡原图 / 主题封面 CDN 出图尺寸（2:3） */
+var levelImageW = 840
+var levelImageH = 1260
+
 module.exports = {
   env: env,
   baseURL: baseURL,
   cdnPrefix: cdnPrefix,
+  levelImageW: levelImageW,
+  levelImageH: levelImageH,
   allLevelsPreviewImage: allLevelsPreviewImage,
   puzzleGridSize: puzzleGridSize,
   defaultGrid: defaultGrid,

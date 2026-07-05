@@ -8,9 +8,9 @@ var imageProxy = require('./image-proxy')
 var DEFAULT_GRID = config.defaultGrid || 4
 var LEVELS_PER_THEME = 25
 
-/** 图集关卡格 2x 缩略图（CDN imageView2；屏上约 110×165 逻辑 px） */
-var GALLERY_THUMB_W = 360
-var GALLERY_THUMB_H = 532
+/** 图集缩略图（imageView2，相对 840×1260 原图） */
+var GALLERY_THUMB_W = 404
+var GALLERY_THUMB_H = 596
 var GALLERY_THUMB_QUALITY = 90
 
 var THEME_CARD_UNLOCKED = 'images/themes/theme-unlocked.png'

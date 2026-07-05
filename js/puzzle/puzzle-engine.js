@@ -15,8 +15,10 @@ var settings = require('../../utils/settings')
 var sfx = require('../sfx')
 var mergeFx = require('../merge-fx')
 
-var SRC_IMAGE_W = 750
-var SRC_IMAGE_H = 1125
+var config = require('../../utils/app-config')
+
+var SRC_IMAGE_W = config.levelImageW || 840
+var SRC_IMAGE_H = config.levelImageH || 1260
 var ANIM_DUR = 220
 /** 提示移动/交换动画（比常规拖拽慢，便于看清） */
 var HINT_ANIM_DUR = 2000

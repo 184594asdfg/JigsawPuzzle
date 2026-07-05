@@ -79,7 +79,7 @@ python3 tools/compress_pack_images.py
 
 - 后端：`.env` → `JIGSAW_CDN_PREFIX=https://cdn2.pastecuts.cn/pyGame/`
 - 客户端：`wx.downloadFile` 只请求 `vapi.pastecuts.cn` 代理接口
-- 出图：**750×1125**（2:3）
+- 出图：**840×1260**（2:3，封面与关卡原图统一）
 
 ## 图集缩略
 
