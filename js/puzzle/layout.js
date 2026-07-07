@@ -11,14 +11,33 @@ var BORDER = 1
 var PIECE_PADDING = 1
 var PIECE_RADIUS = 2
 
-function computeLayout(windowWidth, N) {
-  var boardOuterW = Math.floor(windowWidth * CONTAINER_RATIO)
+function computeLayout(windowWidth, N, opts) {
+  opts = opts || {}
+  var maxBoardW = opts.maxBoardW != null ? opts.maxBoardW : windowWidth * CONTAINER_RATIO
+  var maxBoardH = opts.maxBoardH != null ? opts.maxBoardH : Infinity
+
+  var boardOuterW = Math.floor(Math.min(windowWidth * CONTAINER_RATIO, maxBoardW))
   var gridInnerW = boardOuterW - BOARD_PADDING * 2
   var cellW = Math.floor((gridInnerW - GAP * (N - 1)) / N)
   var cellH = Math.floor((cellW * 3) / 2)
+  if (cellW < 1) cellW = 1
+  if (cellH < 1) cellH = 1
 
   var gridW = cellW * N + GAP * (N - 1)
   var gridH = cellH * N + GAP * (N - 1)
+  var boardH = gridH + BOARD_PADDING * 2
+
+  if (maxBoardH < Infinity && boardH > maxBoardH) {
+    var gridInnerH = maxBoardH - BOARD_PADDING * 2
+    cellH = Math.floor((gridInnerH - GAP * (N - 1)) / N)
+    cellW = Math.floor((cellH * 2) / 3)
+    if (cellW < 1) cellW = 1
+    if (cellH < 1) cellH = 1
+    gridW = cellW * N + GAP * (N - 1)
+    gridH = cellH * N + GAP * (N - 1)
+    boardOuterW = gridW + BOARD_PADDING * 2
+    boardH = gridH + BOARD_PADDING * 2
+  }
   var stepX = cellW + GAP
   var stepY = cellH + GAP
 
@@ -38,8 +57,8 @@ function computeLayout(windowWidth, N) {
     imageTileH: imageTileH,
     gridW: gridW,
     gridH: gridH,
-    boardW: gridW + BOARD_PADDING * 2,
-    boardH: gridH + BOARD_PADDING * 2,
+    boardW: boardOuterW,
+    boardH: boardH,
     stepX: stepX,
     stepY: stepY,
     imgW: cellW * N,

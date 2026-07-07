@@ -29,6 +29,8 @@ var user = require('../../utils/user')
 var COUNTDOWN_WIDTH_RPX = 170
 var COUNTDOWN_AREA_H_RPX = 45
 var COUNTDOWN_GAP_RPX = 24
+/** 棋盘与底部道具栏之间的最小间距 */
+var BOARD_BOTTOM_GAP_RPX = 24
 var COUNTDOWN_DURATION_MS = 3 * 60 * 1000
 var COUNTDOWN_ALARM_IMAGE = 'images/icons/alarm.png'
 var COUNTDOWN_ALARM_W_RPX = 60
@@ -181,8 +183,13 @@ PuzzleScreen.prototype._initEngine = function () {
     return
   }
   if (this.engine) this.engine.destroy()
+  var W = rpx.windowWidth()
+  var H = rpx.windowHeight()
+  var viewport = this._computeBoardViewport(W, H)
   this.engine = new PuzzleEngine({
-    windowWidth: rpx.windowWidth(),
+    windowWidth: W,
+    maxBoardW: viewport.maxBoardW,
+    maxBoardH: viewport.maxBoardH,
     grid: this.gridSize,
     image: this.imageSrc,
     onWin: function () {
@@ -195,16 +202,8 @@ PuzzleScreen.prototype._initEngine = function () {
     },
     onAnyMove: function () {}
   })
-  var W = rpx.windowWidth()
-  var navY = rpx.safeTop()
-  var navH = rpx.rpx(88)
-  var countdownH = rpx.rpx(COUNTDOWN_AREA_H_RPX)
-  var countdownY = navY + navH + rpx.rpx(8)
-  var board = this.engine.boardSize()
-  this.engine.setBoardPosition(
-    Math.floor((W - board.w) / 2),
-    Math.round(countdownY + countdownH + rpx.rpx(COUNTDOWN_GAP_RPX))
-  )
+  var pos = this._computeBoardPosition(W, viewport)
+  this.engine.setBoardPosition(pos.x, pos.y)
   var src = this.imageSrc
   if (assets.hasFailed(src)) assets.clearFailed(src)
   if (assets.get(src)) {
@@ -350,6 +349,30 @@ PuzzleScreen.prototype.render = function (ctx) {
       self._startPressAnim('settings')
     })
   }
+}
+
+PuzzleScreen.prototype._computeBoardViewport = function (W, H) {
+  var navY = rpx.safeTop()
+  var navH = rpx.rpx(88)
+  var countdownH = rpx.rpx(COUNTDOWN_AREA_H_RPX)
+  var countdownY = navY + navH + rpx.rpx(8)
+  var topBound = countdownY + countdownH + rpx.rpx(COUNTDOWN_GAP_RPX)
+  var toolLayout = this._getBottomToolLayout(W, H)
+  var toolTop = toolLayout.addTime.y
+  var bottomBound = toolTop - rpx.rpx(BOARD_BOTTOM_GAP_RPX)
+  var maxBoardH = Math.max(0, bottomBound - topBound)
+  return {
+    topBound: topBound,
+    maxBoardW: W,
+    maxBoardH: maxBoardH
+  }
+}
+
+PuzzleScreen.prototype._computeBoardPosition = function (W, viewport) {
+  var board = this.engine.boardSize()
+  var x = Math.floor((W - board.w) / 2)
+  var y = Math.round(viewport.topBound + Math.max(0, (viewport.maxBoardH - board.h) / 2))
+  return { x: x, y: y }
 }
 
 PuzzleScreen.prototype._drawNav = function (ctx, y, h, W) {

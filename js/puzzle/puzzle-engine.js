@@ -111,6 +111,8 @@ function fisherYatesShuffle(arr) {
 
 function PuzzleEngine(opts) {
   this.windowWidth = opts.windowWidth
+  this.maxBoardW = opts.maxBoardW
+  this.maxBoardH = opts.maxBoardH
   this.gridSize = opts.grid || 4
   this.imageSrc = opts.image
   this.boardX = 0
@@ -163,7 +165,10 @@ PuzzleEngine.prototype._playSound = function (a) {
 }
 
 PuzzleEngine.prototype._applyLayout = function () {
-  this.layout = layoutMod.computeLayout(this.windowWidth, this.gridSize)
+  var opts = {}
+  if (this.maxBoardW != null) opts.maxBoardW = this.maxBoardW
+  if (this.maxBoardH != null) opts.maxBoardH = this.maxBoardH
+  this.layout = layoutMod.computeLayout(this.windowWidth, this.gridSize, opts)
 }
 
 PuzzleEngine.prototype.boardSize = function () {
