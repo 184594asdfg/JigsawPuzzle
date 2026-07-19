@@ -1,23 +1,28 @@
 /**
  * 分享给好友：主动 wx.shareAppMessage + 右上角转发菜单
- * 图标：images/icons/share.png（首页按钮，由设计提供）
+ * 图标：images/icons/share.png（切图 140×115，屏上 101×83 rpx）
  * 转发卡片图（可选）：images/share/card.png，建议 5:4
  */
 var rpx = require('./rpx')
 var assets = require('./assets')
 var draw = require('./draw')
 var progress = require('../utils/progress')
+var gameClub = require('./game-club')
 
-/** 首页设置下方的分享入口（暂时隐藏） */
+/** 暂时关闭首页「分享好友」图标，后续再开 */
 var SHOW_SHARE_BTN = false
+// var SHOW_SHARE_BTN = true
 
 var SHARE_ICON = 'images/icons/share.png'
 /** 转发消息配图；无则用小游戏默认截图 */
 var SHARE_CARD_IMAGE = 'images/share/card.png'
 var SHARE_TITLE = '来一局治愈系拼图吧！'
-var SHARE_GAP_BELOW_SETTINGS_RPX = 14
-var SHARE_SIZE_RPX = 72
-var SHARE_LEFT_RPX = 16
+/** 切图 140×115；屏上高度与游戏圈一致 88rpx，宽按比例 */
+var SHARE_SRC_W = 140
+var SHARE_SRC_H = 115
+var SHARE_H_RPX = 83
+var SHARE_W_RPX = Math.round(SHARE_SRC_W * SHARE_H_RPX / SHARE_SRC_H)
+var GAP_FROM_GAME_CLUB_RPX = 12
 
 var inited = false
 
@@ -70,44 +75,40 @@ function shareToFriend() {
   }
 }
 
-function getSettingsNavRect(navY, navH) {
-  var size = rpx.rpx(72)
-  var x = rpx.rpx(16)
-  var y = navY + (navH - size) / 2
-  return { x: x, y: y, w: size, h: size }
-}
-
-/** 分享按钮区域：紧贴设置图标下方 */
-function navHitRect(navY, navH, expand) {
+/** 分享按钮：游戏圈右侧，垂直与游戏圈居中对齐 */
+function navHitRect(navY, navH, heroTopY, expand) {
   if (!SHOW_SHARE_BTN) {
     return { x: 0, y: 0, w: 0, h: 0, cx: 0, cy: 0 }
   }
-  var settings = getSettingsNavRect(navY, navH)
-  var size = rpx.rpx(SHARE_SIZE_RPX)
-  var gap = rpx.rpx(SHARE_GAP_BELOW_SETTINGS_RPX)
-  var x = rpx.rpx(SHARE_LEFT_RPX)
-  var y = settings.y + settings.h + gap
+  var club = gameClub.navHitRect(navY, navH, heroTopY, false)
+  var w = rpx.rpx(SHARE_W_RPX)
+  var h = rpx.rpx(SHARE_H_RPX)
+  var x = club.x + club.w + rpx.rpx(GAP_FROM_GAME_CLUB_RPX)
+  var y = club.cy - h / 2
   var pad = expand ? rpx.rpx(16) : 0
   return {
     x: x - pad,
     y: y - pad,
-    w: size + pad * 2,
-    h: size + pad * 2,
-    cx: x + size / 2,
-    cy: y + size / 2
+    w: w + pad * 2,
+    h: h + pad * 2,
+    cx: x + w / 2,
+    cy: y + h / 2
   }
 }
 
-function drawNavIcon(ctx, navY, navH, scale) {
+function drawNavIcon(ctx, navY, navH, heroTopY, scale) {
   if (!SHOW_SHARE_BTN) return null
   scale = scale == null ? 1 : scale
-  var rect = navHitRect(navY, navH, false)
+  var rect = navHitRect(navY, navH, heroTopY, false)
   var img = assets.get(SHARE_ICON)
   if (!img) assets.tryLoad(SHARE_ICON)
 
   function paint(drawable) {
+    function drawFit() {
+      draw.drawImageContain(ctx, drawable, rect.x, rect.y, rect.w, rect.h)
+    }
     if (scale === 1) {
-      ctx.drawImage(drawable, rect.x, rect.y, rect.w, rect.h)
+      drawFit()
       return
     }
     ctx.save()
@@ -116,7 +117,7 @@ function drawNavIcon(ctx, navY, navH, scale) {
     ctx.translate(cx, cy)
     ctx.scale(scale, scale)
     ctx.translate(-cx, -cy)
-    ctx.drawImage(drawable, rect.x, rect.y, rect.w, rect.h)
+    drawFit()
     ctx.restore()
   }
 

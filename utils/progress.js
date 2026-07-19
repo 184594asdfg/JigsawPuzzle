@@ -275,6 +275,27 @@ function getNextLevel(themes) {
   }
 }
 
+/**
+ * 首页 hero 展示用主题：刚好打完一整主题（25/50/75…）时仍显示该主题封面，
+ * 不提前切到下一主题（下一关入口仍由 getNextLevel 决定）。
+ */
+function getHeroDisplayTheme(themes) {
+  if (!themes || !themes.length) return null
+  ensureLoaded()
+  if (completedCount <= 0) {
+    var first = getNextLevel(themes)
+    return first && first.theme ? first.theme : null
+  }
+  var cumulative = 0
+  for (var i = 0; i < themes.length; i++) {
+    cumulative += getThemeLevelTotal(themes[i])
+    if (completedCount === cumulative) return themes[i]
+    if (completedCount < cumulative) break
+  }
+  var next = getNextLevel(themes)
+  return next && next.theme ? next.theme : null
+}
+
 function findFirstPlayableLevel(themes) {
   var next = getNextLevel(themes)
   if (!next || !next.level || !next.level.key) return null
@@ -334,6 +355,7 @@ module.exports = {
   countThemeCompleted: countThemeCompleted,
   countAllCompleted: countAllCompleted,
   getNextLevel: getNextLevel,
+  getHeroDisplayTheme: getHeroDisplayTheme,
   findFirstPlayableLevel: findFirstPlayableLevel,
   getLevelAfterKey: getLevelAfterKey,
   getLevelAfterCurrent: getLevelAfterCurrent

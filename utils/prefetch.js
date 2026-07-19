@@ -77,12 +77,12 @@ function resolveLevelImage(level, theme) {
   return galleryData.resolveLevelImage(theme, level.level, level)
 }
 
-/** 首页 hero 内拼图区：当前可玩主题封面（代理 URL） */
+/** 首页 hero 内拼图区：展示主题封面（整主题刚通关时仍用当前主题，不预取下一主题） */
 function getCurrentThemeCoverUrl() {
   if (!galleryData.isLoaded()) return ''
-  var next = progress.getNextLevel(galleryData.getThemes())
-  if (!next || !next.theme) return ''
-  return imageProxy.resolveThemeCoverUrl(next.theme)
+  var theme = progress.getHeroDisplayTheme(galleryData.getThemes())
+  if (!theme) return ''
+  return imageProxy.resolveThemeCoverUrl(theme)
 }
 
 function getCurrentPlayableLevel() {

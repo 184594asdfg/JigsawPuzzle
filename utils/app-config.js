@@ -17,7 +17,7 @@ function getEnv() {
 }
 
 var API = {
-  development: 'http://localhost:3003/api',
+  development: 'https://vapi.pastecuts.cn/booksnap/api',
   production: 'https://vapi.pastecuts.cn/booksnap/api'
 }
 

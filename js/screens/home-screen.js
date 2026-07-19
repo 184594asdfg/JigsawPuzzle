@@ -241,8 +241,7 @@ HomeScreen.prototype._resolveHeroTheme = function () {
     var t = galleryData.getThemeById(themeId)
     if (t) return t
   }
-  var next = progress.getNextLevel(galleryData.getThemes())
-  return next && next.theme ? next.theme : null
+  return progress.getHeroDisplayTheme(galleryData.getThemes())
 }
 
 HomeScreen.prototype._getThemeCoverUrl = function (theme) {
@@ -360,7 +359,7 @@ HomeScreen.prototype.render = function (ctx) {
     this._drawSettingsModal(ctx, W, H)
   }
 
-  // 左上：设置 + 游戏圈（排行弹窗打开时仍先绘制，由弹窗遮罩盖住）
+  // 左上：设置 + 游戏圈 + 分享（排行弹窗打开时仍先绘制，由弹窗遮罩盖住）
   var self = this
   var anim = this._pressAnim
   var navY = layout.nav.y
@@ -373,7 +372,7 @@ HomeScreen.prototype.render = function (ctx) {
     ctx, navY, navH, heroTopY, pressAnim.btnScale(anim, 'gameClub')
   )
   if (shareNav.SHOW_SHARE_BTN) {
-    shareNav.drawNavIcon(ctx, navY, navH, pressAnim.btnScale(anim, 'share'))
+    shareNav.drawNavIcon(ctx, navY, navH, heroTopY, pressAnim.btnScale(anim, 'share'))
   }
 
   staminaBar.drawBar(ctx, navY, navH, heroTopY, W)
@@ -390,7 +389,7 @@ HomeScreen.prototype.render = function (ctx) {
       self._startPressAnim('gameClub')
     })
     if (shareNav.SHOW_SHARE_BTN) {
-      this.addHitZone(shareNav.navHitRect(navY, navH, true), function () {
+      this.addHitZone(shareNav.navHitRect(navY, navH, heroTopY, true), function () {
         self._startPressAnim('share')
       })
     }

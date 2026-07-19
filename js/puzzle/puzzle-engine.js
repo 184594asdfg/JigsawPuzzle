@@ -81,6 +81,14 @@ function mergePulseScale(t) {
   return 1 + MERGE_PULSE_BUMP * (1 - easeOutCubic((t - MERGE_PULSE_PEAK_AT) / (1 - MERGE_PULSE_PEAK_AT)))
 }
 
+/** 融合放大时把缩放比对齐到整数像素，避免亚像素渲染出缝 */
+function snapMergePulseScale(layout, rawScale) {
+  if (!layout || rawScale === 1) return 1
+  var sw = Math.round(layout.cellW * rawScale) / layout.cellW
+  var sh = Math.round(layout.cellH * rawScale) / layout.cellH
+  return Math.min(sw, sh)
+}
+
 /** 组合块外接矩形内居中取方形光效区域（按短边缩放） */
 function mergeFxRectFromGroup(gx, gy, gw, gh) {
   var base = Math.min(gw, gh)
@@ -730,7 +738,7 @@ PuzzleEngine.prototype.render = function (ctx) {
 PuzzleEngine.prototype._mergePulseScaleForGroup = function (groupId) {
   var fx = this._mergeFx
   if (!fx || fx.groupId !== groupId || fx.t == null) return 1
-  return mergePulseScale(fx.t)
+  return snapMergePulseScale(this.layout, mergePulseScale(fx.t))
 }
 
 PuzzleEngine.prototype._renderGroupDragShadow = function (ctx, bx, by, group, gtx, gty, L) {
@@ -843,11 +851,18 @@ PuzzleEngine.prototype._renderPiece = function (ctx, piece, x, y, L, withShadow,
     ctx.shadowOffsetY = 4
   }
 
-  // 底色（白）；发牌/牌背阶段不铺白底，避免露出白边
+  // 底色（白）；组合块内接缝不铺白底，避免融合放大时接缝露白
   if (!showBack) {
-    draw.roundedRectPathCorners(ctx, x, y, cellW, cellH, tl, tr, br, bl)
     ctx.fillStyle = '#ffffff'
-    ctx.fill()
+    if (piece.inCompound) {
+      if (!att.top) ctx.fillRect(x, y, cellW, inset)
+      if (!att.bottom) ctx.fillRect(x, y + cellH - inset, cellW, inset)
+      if (!att.left) ctx.fillRect(x, y, inset, cellH)
+      if (!att.right) ctx.fillRect(x + cellW - inset, y, inset, cellH)
+    } else {
+      draw.roundedRectPathCorners(ctx, x, y, cellW, cellH, tl, tr, br, bl)
+      ctx.fill()
+    }
   }
 
   ctx.restore()
@@ -932,7 +947,7 @@ PuzzleEngine.prototype._renderMergeFx = function (ctx, bx, by) {
   }
   var fade = fx.t < 0.15 ? (fx.t / 0.15) : (fx.t > 0.85 ? Math.max(0, 1 - (fx.t - 0.85) / 0.15) : 1)
   var alpha = fade * MERGE_FX_ALPHA
-  var scale = mergePulseScale(fx.t)
+  var scale = snapMergePulseScale(this.layout, mergePulseScale(fx.t))
   var dx = bx + fx.x
   var dy = by + fx.y
   ctx.save()
