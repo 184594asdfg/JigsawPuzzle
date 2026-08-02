@@ -13,8 +13,6 @@ var settingsModal = require('./settings-modal')
 var share = require('./share')
 var gameClub = require('./game-club')
 var subpackUi = require('../utils/subpack-ui')
-var user = require('../utils/user')
-var stamina = require('../utils/stamina')
 require('../utils/rank-modal')
 
 var canvas = wx.createCanvas()
@@ -50,9 +48,6 @@ var CORE_ASSETS = [
   'images/icons/rank.png',
   'images/icons/setting.png',
   'images/icons/game-club.png',
-  'images/icons/stamina_bar_bg.png',
-  'images/icons/stamina_modal.png',
-  'images/icons/btn_stamina_recover.png',
   'images/themes/theme-unlocked.png',
   'images/themes/theme-unlocked-overlay.png',
   'images/themes/theme-locked.png',
@@ -190,7 +185,6 @@ wx.onTouchCancel(function (e) { if (canInteract()) screenManager.onTouchCancel(e
 
 wx.onShow(function () {
   if (!canInteract()) return
-  stamina.loadFromStorage()
   bgm.sync()
   remoteSync.syncOnEnter().then(function () {
     return subpackUi.preloadAll().catch(function () {})
@@ -200,7 +194,6 @@ wx.onShow(function () {
 })
 wx.onHide(function () {
   bgm.pause()
-  stamina.persist()
 })
 
 var lastTs = 0
@@ -214,7 +207,6 @@ function loop(ts) {
     loadingScreen.update(splash, dt)
     loadingScreen.render(ctx, splash, 1)
   } else {
-    stamina.tickOnline()
     screenManager.render(dt)
   }
 

@@ -5,9 +5,7 @@ var assets = require('../js/assets')
 var galleryData = require('./gallery-data')
 var progress = require('./progress')
 var subpackUi = require('./subpack-ui')
-var stamina = require('./stamina')
 var imageProxy = require('./image-proxy')
-var user = require('./user')
 
 var prefetchToken = 0
 var lastPrefetchKeys = ''
@@ -223,19 +221,8 @@ function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
     try { wx.showToast({ title: '关卡数据缺失', icon: 'none' }) } catch (e) {}
     return
   }
-  stamina.loadFromStorage().then(function () {
-    if (!stamina.canPlay()) {
-      try {
-        wx.showToast({
-          title: '体力不足',
-          icon: 'none',
-          duration: 2000
-        })
-      } catch (e) {}
-      return
-    }
-    var delay = minDelayMs > 0 ? minDelayMs : 0
-    var imageUrl = resolved.image || imageProxy.buildLevelImageUrl(resolved.key)
+  var delay = minDelayMs > 0 ? minDelayMs : 0
+  var imageUrl = resolved.image || imageProxy.buildLevelImageUrl(resolved.key)
   var loadP
   if (imageUrl) {
     loadP = prefetchLevelImage(imageUrl).catch(function () {
@@ -254,18 +241,11 @@ function enterPuzzleWhenReady(manager, resolved, minDelayMs) {
       return prefetchLevelImage(play.imageUrl)
     })
   }
-    var waitP = delay > 0
-      ? new Promise(function (resolve) { setTimeout(resolve, delay) })
-      : Promise.resolve()
-    var uiP = subpackUi.preloadAll().catch(function () {})
-    return Promise.all([loadP, waitP, uiP]).then(function () {
-      return stamina.consume(1)
-    })
-  }).then(function (ok) {
-    if (!ok) {
-      try { wx.showToast({ title: '体力不足', icon: 'none' }) } catch (e) {}
-      return
-    }
+  var waitP = delay > 0
+    ? new Promise(function (resolve) { setTimeout(resolve, delay) })
+    : Promise.resolve()
+  var uiP = subpackUi.preloadAll().catch(function () {})
+  Promise.all([loadP, waitP, uiP]).then(function () {
     var PuzzleScreen = require('../js/screens/puzzle-screen')
     manager.push(new PuzzleScreen({
       image: resolved.image,

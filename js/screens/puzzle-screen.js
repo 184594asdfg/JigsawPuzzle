@@ -1,5 +1,5 @@
 /**
- * 拼图场景：顶部导航 + 倒计时 + 棋盘 + 底部工具栏 + 成功弹窗。
+ * 拼图场景：顶部导航 + 棋盘 + 底部工具栏 + 成功弹窗。
  */
 var BaseScreen = require('./base-screen')
 var HomeScreen = require('./home-screen')
@@ -12,8 +12,6 @@ var settings = require('../../utils/settings')
 var settingsModal = require('../settings-modal')
 var toolModal = require('../puzzle-tool-modal')
 var toolRewardFly = require('../tool-reward-fly')
-var addTimeAlarmFly = require('../add-time-alarm-fly')
-var timeupOverlay = require('../timeup-overlay')
 var mergeFx = require('../merge-fx')
 var winOverlay = require('../win-overlay')
 var subpackUi = require('../../utils/subpack-ui')
@@ -25,33 +23,20 @@ var sfx = require('../sfx')
 var rewardedAd = require('../rewarded-ad')
 var user = require('../../utils/user')
 
-/** 倒计时区域（rpx）：只设宽度，水平居中，无左右边距 */
-var COUNTDOWN_WIDTH_RPX = 170
-var COUNTDOWN_AREA_H_RPX = 45
-var COUNTDOWN_GAP_RPX = 24
 /** 棋盘与底部道具栏之间的最小间距 */
 var BOARD_BOTTOM_GAP_RPX = 24
-var COUNTDOWN_DURATION_MS = 3 * 60 * 1000
-var COUNTDOWN_ALARM_IMAGE = 'images/icons/alarm.png'
-var COUNTDOWN_ALARM_W_RPX = 60
-var COUNTDOWN_ALARM_H_RPX = 60
-var COUNTDOWN_ALARM_LEFT_RPX = 0
-/** 时间文字相对条中心的水平偏移（正数向右） */
-var COUNTDOWN_TIME_OFFSET_X_RPX = 20
-var COUNTDOWN_ADD_MS = 60 * 1000
 /** 整图预览会话 60 秒内可无限次打开；首次使用消耗 1 次 */
 var PREVIEW_SESSION_MS = 60 * 1000
 var PREVIEW_ICON_VIEWING = 'images/icons/preview3.png'
 /** 拼图页纯色背景（与原先渐变主色一致） */
 var PUZZLE_BG = '#d0b7eb'
 
-/** 底部三个工具图标：显示 124×138 rpx，资源 248×276 @2x */
+/** 底部工具图标：显示 124×138 rpx，资源 248×276 @2x */
 var BOTTOM_TOOL_W_RPX = 124
 var BOTTOM_TOOL_H_RPX = 138
 var BOTTOM_TOOL_GAP_RPX = 96
 var BOTTOM_TOOL_BOTTOM_RPX = 48
 var BOTTOM_TOOLS = [
-  { action: 'addTime', path: 'images/icons/add_time.png', pathActive: 'images/icons/add_time2.png' },
   { action: 'hint', path: 'images/icons/hint.png', pathActive: 'images/icons/hint2.png' },
   { action: 'preview', path: 'images/icons/preview.png', pathActive: 'images/icons/preview2.png' }
 ]
@@ -76,13 +61,6 @@ function bottomToolIconPath(tool, screen) {
   return remain > 0 ? tool.pathActive : tool.path
 }
 
-function formatCountdown(ms) {
-  var sec = Math.max(0, Math.ceil(ms / 1000))
-  var m = Math.floor(sec / 60)
-  var s = sec % 60
-  return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s
-}
-
 function PuzzleScreen(opts) {
   BaseScreen.call(this)
   this.opts = opts || {}
@@ -91,9 +69,6 @@ function PuzzleScreen(opts) {
   if (!this.gridSize || isNaN(this.gridSize)) this.gridSize = 4
   this.levelKey = opts.levelKey || ''
   this.levelLabel = opts.levelLabel || '拼图'
-  this.timeLimitSec = opts.timeLimit != null && opts.timeLimit !== ''
-    ? Number(opts.timeLimit)
-    : 0
   this.engine = null
   this.loading = true
   this.showSuccess = false
@@ -102,20 +77,14 @@ function PuzzleScreen(opts) {
   this._navRect = null
   this._winFxMs = 0
   this._engineTouching = false
-  this.countdownMs = 0
-  this.countdownTotalMs = 0
-  this.countdownEnded = false
   this.loadError = ''
   this._pressAnim = null
   this._toolRewardFly = null
-  this._addTimeAlarmFly = null
   this._toolConsuming = false
   this.showPreviewOverlay = false
   this.previewSessionMs = 0
-  this._timeupFxMs = 0
   this._winNewUnlock = false
   this._winNavigatingHome = false
-  this._countdownPaused = false
 }
 PuzzleScreen.prototype = Object.create(BaseScreen.prototype)
 PuzzleScreen.prototype.constructor = PuzzleScreen
@@ -125,7 +94,6 @@ PuzzleScreen.prototype.onEnter = function (manager) {
   var self = this
   assets.load(PuzzleEngine.CARD_BACK_IMAGE)
   rewardedAd.init()
-  assets.load(COUNTDOWN_ALARM_IMAGE)
   assets.load(PREVIEW_ICON_VIEWING)
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
     assets.load(BOTTOM_TOOLS[i].path)
@@ -135,7 +103,6 @@ PuzzleScreen.prototype.onEnter = function (manager) {
   mergeFx.preload()
   subpackUi.preloadAll().then(function () {
     toolModal.preload()
-    timeupOverlay.preload()
     winOverlay.preload()
     self._initEngine()
   }).catch(function (err) {
@@ -162,20 +129,13 @@ PuzzleScreen.prototype._initEngine = function () {
   this.toolModal = null
   toolModal.clearToolEnter(this)
   this._toolRewardFly = null
-  this._addTimeAlarmFly = null
   this._toolConsuming = false
   this.showPreviewOverlay = false
   this.previewSessionMs = 0
-  this.countdownEnded = false
-  this._countdownPaused = false
-  this._timeupFxMs = 0
   this._winNewUnlock = false
   this._winNavigatingHome = false
   winOverlay.resetFx(this)
   tools.fetchTools()
-  var limitMs = this.timeLimitSec > 0 ? this.timeLimitSec * 1000 : COUNTDOWN_DURATION_MS
-  this.countdownTotalMs = limitMs
-  this.countdownMs = limitMs
   if (!this.imageSrc) {
     this.loading = false
     this.loadError = 'missing_image'
@@ -229,30 +189,9 @@ PuzzleScreen.prototype.update = function (dt) {
   if (this.showSettings) settingsModal.tickSettingsEnter(this, dt)
   if (this.toolModal) toolModal.tickToolEnter(this, dt)
   toolRewardFly.tick(this)
-  addTimeAlarmFly.tick(this)
   if (this.previewSessionMs > 0) {
     this.previewSessionMs -= dt
     if (this.previewSessionMs <= 0) this._endPreviewSession()
-  }
-  if (
-    this.engine && !this.loading && !this.engine.isInputLocked() &&
-    !this.showSuccess && !this.showSettings &&
-    !this.toolModal &&
-    !this._countdownPaused &&
-    !this.countdownEnded && this.countdownMs > 0
-  ) {
-    this.countdownMs -= dt
-    if (this.countdownMs <= 0) {
-      this.countdownMs = 0
-      if (!this.countdownEnded) {
-        this.countdownEnded = true
-        sfx.playTimeup()
-        timeupOverlay.resetFx(this)
-      }
-    }
-  }
-  if (this.countdownEnded && !this.showSuccess) {
-    timeupOverlay.tickFx(this, dt)
   }
   if (this.showSuccess) {
     winOverlay.tickFx(this, dt)
@@ -261,8 +200,6 @@ PuzzleScreen.prototype.update = function (dt) {
   this._pressAnim = tick.anim
   if (tick.completed) {
     if (tick.id === 'settings') this._openSettings()
-    else if (tick.id === 'timeupHome') this._onTimeUpGoHome()
-    else if (tick.id === 'timeupWatch') this._onTimeUpWatchAddTime()
     else this._onBottomTool(tick.id)
   }
 }
@@ -312,23 +249,13 @@ PuzzleScreen.prototype.render = function (ctx) {
 
   this._drawNav(ctx, navY, navH, W)
 
-  // 倒计时区域 + 棋盘
-  var countdownH = rpx.rpx(COUNTDOWN_AREA_H_RPX)
-  var countdownY = navY + navH + rpx.rpx(8)
-  this._drawCountdown(ctx, W, countdownY, countdownH)
   this.engine.render(ctx)
 
   this._drawBottomTools(ctx, W, H)
   toolRewardFly.render(ctx, this)
-  addTimeAlarmFly.render(ctx, this)
 
   if (this.showPreviewOverlay) {
     this._drawPreviewOverlay(ctx, W, H)
-  }
-
-  if (this.countdownEnded) {
-    this._drawTimeUpOverlay(ctx, W, H)
-    return
   }
 
   if (this.toolModal) {
@@ -343,7 +270,7 @@ PuzzleScreen.prototype.render = function (ctx) {
   // 设置图标（按压动效结束后再弹窗）
   var anim = this._pressAnim
   settingsModal.drawNavIcon(ctx, navY, navH, pressAnim.btnScale(anim, 'settings'))
-  if (!this.showSettings && !anim && !this.countdownEnded &&
+  if (!this.showSettings && !anim &&
     !(this.engine && this.engine.isInputLocked())) {
     this.addHitZone(settingsModal.navHitRect(navY, navH, true), function () {
       self._startPressAnim('settings')
@@ -354,11 +281,9 @@ PuzzleScreen.prototype.render = function (ctx) {
 PuzzleScreen.prototype._computeBoardViewport = function (W, H) {
   var navY = rpx.safeTop()
   var navH = rpx.rpx(88)
-  var countdownH = rpx.rpx(COUNTDOWN_AREA_H_RPX)
-  var countdownY = navY + navH + rpx.rpx(8)
-  var topBound = countdownY + countdownH + rpx.rpx(COUNTDOWN_GAP_RPX)
+  var topBound = navY + navH + rpx.rpx(24)
   var toolLayout = this._getBottomToolLayout(W, H)
-  var toolTop = toolLayout.addTime.y
+  var toolTop = toolLayout.hint.y
   var bottomBound = toolTop - rpx.rpx(BOARD_BOTTOM_GAP_RPX)
   var maxBoardH = Math.max(0, bottomBound - topBound)
   return {
@@ -381,49 +306,6 @@ PuzzleScreen.prototype._drawNav = function (ctx, y, h, W) {
     '600 ' + rpx.rpx(40).toFixed(0) + 'px sans-serif', '#ffffff'
   )
   this._navRect = { x: 0, y: y, w: W, h: h }
-}
-
-PuzzleScreen.prototype._getCountdownLayout = function (W) {
-  var navY = rpx.safeTop()
-  var navH = rpx.rpx(88)
-  var h = rpx.rpx(COUNTDOWN_AREA_H_RPX)
-  var y = navY + navH + rpx.rpx(8)
-  var w = Math.min(W, rpx.rpx(COUNTDOWN_WIDTH_RPX))
-  var x = (W - w) / 2
-  var alarmW = rpx.rpx(COUNTDOWN_ALARM_W_RPX)
-  var alarmH = rpx.rpx(COUNTDOWN_ALARM_H_RPX)
-  var alarmX = x + rpx.rpx(COUNTDOWN_ALARM_LEFT_RPX)
-  var alarmY = y + (h - alarmH) / 2
-  return {
-    x: x, y: y, w: w, h: h,
-    alarmX: alarmX, alarmY: alarmY, alarmW: alarmW, alarmH: alarmH,
-    alarmCx: alarmX + alarmW / 2,
-    alarmCy: alarmY + alarmH / 2
-  }
-}
-
-PuzzleScreen.prototype._drawCountdown = function (ctx, W, y, h) {
-  var layout = this._getCountdownLayout(W)
-  var x = layout.x
-  var w = layout.w
-  var radius = h / 2
-  var ratio = this.countdownTotalMs > 0 ? this.countdownMs / this.countdownTotalMs : 0
-
-  draw.fillRoundedRect(ctx, x, y, w, h, radius, 'rgba(0,0,0,0.2)')
-
-  var timeFont = '600 ' + rpx.rpx(28).toFixed(0) + 'px sans-serif'
-  var timeColor = this.countdownEnded ? '#ffb4b4' : (ratio < 0.2 ? '#ffe0a8' : '#ffffff')
-  var timeX = x + w / 2 + rpx.rpx(COUNTDOWN_TIME_OFFSET_X_RPX)
-
-  var alarmImg = assets.get(COUNTDOWN_ALARM_IMAGE)
-  if (!alarmImg) assets.load(COUNTDOWN_ALARM_IMAGE)
-  if (alarmImg) {
-    ctx.drawImage(
-      alarmImg, layout.alarmX, layout.alarmY, layout.alarmW, layout.alarmH
-    )
-  }
-
-  draw.fillTextCentered(ctx, formatCountdown(this.countdownMs), timeX, y + h / 2, timeFont, timeColor)
 }
 
 PuzzleScreen.prototype._getBottomToolLayout = function (W, H) {
@@ -471,9 +353,7 @@ PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
   var self = this
   var anim = this._pressAnim
   var blockHits = !!anim || this.showSuccess || this.showSettings || this.toolModal ||
-    this.countdownEnded ||
     this.showPreviewOverlay || toolRewardFly.isActive(this) ||
-    addTimeAlarmFly.isActive(this) ||
     (this.engine && this.engine.isInputLocked())
 
   for (var i = 0; i < BOTTOM_TOOLS.length; i++) {
@@ -521,8 +401,8 @@ PuzzleScreen.prototype._drawBottomTools = function (ctx, W, H) {
 }
 
 PuzzleScreen.prototype._onBottomTool = function (action) {
-  if (this.showSuccess || this.showSettings || this.toolModal || this.countdownEnded) return
-  if (toolRewardFly.isActive(this) || addTimeAlarmFly.isActive(this)) return
+  if (this.showSuccess || this.showSettings || this.toolModal) return
+  if (toolRewardFly.isActive(this)) return
   if (this.engine && this.engine.isInputLocked()) return
   if (action === 'preview' && isPreviewSessionActive(this)) {
     this._openPreviewOverlay()
@@ -532,7 +412,7 @@ PuzzleScreen.prototype._onBottomTool = function (action) {
     this._consumeAndApplyTool(action)
     return
   }
-  if (action === 'addTime' || action === 'hint' || action === 'preview') {
+  if (action === 'hint' || action === 'preview') {
     this.toolModal = action
     toolModal.beginToolEnter(this)
   }
@@ -543,17 +423,8 @@ PuzzleScreen.prototype._closeToolModal = function () {
   toolModal.clearToolEnter(this)
 }
 
-/** 激励视频播放期间暂停关卡倒计时，关闭或加载失败后恢复 */
 PuzzleScreen.prototype._showRewardedAd = function () {
-  var self = this
-  self._countdownPaused = true
-  return rewardedAd.show().then(function (completed) {
-    self._countdownPaused = false
-    return completed
-  }, function (err) {
-    self._countdownPaused = false
-    throw err
-  })
+  return rewardedAd.show()
 }
 
 PuzzleScreen.prototype._drawToolModal = function (ctx, W, H) {
@@ -630,29 +501,8 @@ PuzzleScreen.prototype._consumeAndApplyTool = function (type) {
   })
 }
 
-PuzzleScreen.prototype._playAddTimeAlarmFly = function () {
-  var W = rpx.windowWidth()
-  var H = rpx.windowHeight()
-  var from = this._getBottomToolLayout(W, H).addTime
-  var cd = this._getCountdownLayout(W)
-  if (!from) {
-    this._addCountdownTime()
-    return
-  }
-  var self = this
-  addTimeAlarmFly.start(this, {
-    fromX: from.cx,
-    fromY: from.cy,
-    toX: cd.alarmCx,
-    toY: cd.alarmCy,
-    onDone: function () { self._addCountdownTime() }
-  })
-}
-
 PuzzleScreen.prototype._runToolEffect = function (type) {
-  if (type === 'addTime') {
-    this._playAddTimeAlarmFly()
-  } else if (type === 'preview') {
+  if (type === 'preview') {
     this._startPreviewSession()
     this._openPreviewOverlay()
   }
@@ -711,54 +561,6 @@ PuzzleScreen.prototype._drawPreviewOverlay = function (ctx, W, H) {
     ctx, '点击空白处关闭', W / 2, H - rpx.safeBottom() - rpx.rpx(72),
     '400 ' + rpx.rpx(24).toFixed(0) + 'px sans-serif', 'rgba(255,255,255,0.75)'
   )
-}
-
-PuzzleScreen.prototype._addCountdownTime = function () {
-  this.countdownMs += COUNTDOWN_ADD_MS
-  this.countdownTotalMs += COUNTDOWN_ADD_MS
-  this.countdownEnded = false
-}
-
-PuzzleScreen.prototype._drawTimeUpOverlay = function (ctx, W, H) {
-  var self = this
-  var pressId = this._pressAnim && (
-    this._pressAnim.id === 'timeupHome' || this._pressAnim.id === 'timeupWatch'
-  ) ? this._pressAnim.id : null
-  timeupOverlay.drawOverlay(this, ctx, W, H, {
-    onGoHome: function () { self._startPressAnim('timeupHome') },
-    onWatchAddTime: function () { self._startPressAnim('timeupWatch') }
-  }, pressId)
-}
-
-/** 观看激励视频后 +60 秒并继续 */
-PuzzleScreen.prototype._onTimeUpWatchAddTime = function () {
-  if (!this.countdownEnded || this._toolConsuming) return
-  var self = this
-  this._showRewardedAd().then(function (completed) {
-    if (!completed) {
-      try { wx.showToast({ title: '需完整观看广告才能加时', icon: 'none' }) } catch (e) {}
-      return
-    }
-    var W = rpx.windowWidth()
-    var layout = timeupOverlay.computeLayout(W, rpx.windowHeight())
-    var cd = self._getCountdownLayout(W)
-    self.countdownEnded = false
-    addTimeAlarmFly.start(self, {
-      fromX: layout.watchCx,
-      fromY: layout.btnCy,
-      toX: cd.alarmCx,
-      toY: cd.alarmCy,
-      onDone: function () { self._addCountdownTime() }
-    })
-  }).catch(function (err) {
-    try { wx.showToast({ title: err.message || '广告加载失败', icon: 'none' }) } catch (e) {}
-  })
-}
-
-PuzzleScreen.prototype._onTimeUpGoHome = function () {
-  if (!this.countdownEnded) return
-  this.countdownEnded = false
-  this._goHome()
 }
 
 PuzzleScreen.prototype._drawPrimaryButton = function (ctx, x, y, w, h, label) {
@@ -832,7 +634,7 @@ PuzzleScreen.prototype._goHome = function () {
 }
 
 PuzzleScreen.prototype._openSettings = function () {
-  if (this.showSuccess || this.countdownEnded) return
+  if (this.showSuccess) return
   if (this.engine && this.engine.isInputLocked()) return
   this.showSettings = true
   settingsModal.beginSettingsEnter(this)
@@ -841,15 +643,9 @@ PuzzleScreen.prototype._openSettings = function () {
 PuzzleScreen.prototype._startPressAnim = function (id) {
   if (this._pressAnim) return
   if (this.loading || !this.engine || this.loadError) return
-  var isTimeUp = id === 'timeupHome' || id === 'timeupWatch'
-  if (isTimeUp) {
-    if (!this.countdownEnded || this.showSuccess) return
-    if (toolRewardFly.isActive(this) || addTimeAlarmFly.isActive(this)) return
-  } else {
-    if (this.showSuccess || this.showSettings || this.toolModal || this.countdownEnded) return
-    if (toolRewardFly.isActive(this) || addTimeAlarmFly.isActive(this)) return
-    if (this.engine && this.engine.isInputLocked()) return
-  }
+  if (this.showSuccess || this.showSettings || this.toolModal) return
+  if (toolRewardFly.isActive(this)) return
+  if (this.engine && this.engine.isInputLocked()) return
   sfx.playClick()
   this._pressAnim = { id: id, time: 0 }
 }
@@ -872,9 +668,7 @@ PuzzleScreen.prototype._goNextLevel = function () {
 PuzzleScreen.prototype._isOnEngine = function (x, y) {
   if (!this.engine || this.loading || this.engine.isInputLocked() ||
     this.showSuccess || this.showSettings || this.toolModal ||
-    this.countdownEnded ||
-    this.showPreviewOverlay || toolRewardFly.isActive(this) ||
-    addTimeAlarmFly.isActive(this)) return false
+    this.showPreviewOverlay || toolRewardFly.isActive(this)) return false
   var board = this.engine.boardSize()
   var bx = this.engine.boardX
   var by = this.engine.boardY
